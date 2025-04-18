@@ -1,0 +1,16 @@
+
+Yes. Much of Mazzola's work in the "Topos of Music (ToM)" is built upon the idea of the Yoneda Lemma, which states that an object's identity is interchangeable with the totality of "all the ways it is seen from outside of itself". It is perhaps useful to consider the philosophical implications of the Yoneda Lemma like this: You work at a particle accelerator. You want to understand some particle. All you can do are throw other particles at it and see what happens. If you understand how your mystery particle responds to all possible test particles at all possible test energies, then you know everything there is to know about your mystery particle. In other words, all we can know about an object is from how it interacts with other objects.
+
+Mazzola used this philosophical idea of the Yoneda Lemma as a way to expand upon his original "naive approach" of defining musical parameter values directly, by instead replacing literal values with "addresses", which are essentially like "offsets" from a central-value (called "the zero address" by Mazzola).  I have a strong intuition that this is analogous to Leyton's idea of a "Control Group Action" acting upon a set of fiber group copies, but need some more insight into this area.
+
+It is also said that the Yoneda Lemma is a generalization of Cayley's Theory in Abstract Algebra. Cayley's Theory states that every group G is isomorphic to a subgroup of a symmetric group. More specifically, G is isomorphic to a subgroup of the symmetric group Sym(G), whose elements are the permutations of the underlying set of G. Leyton's theory works with permutations, and Mazzola generalizes that into working with functors (functions acting on some space of possible input values).
+
+My interest in the above ideas is in their possible applications within the practice of algorithmic music composition (AMC), to more efficiently explore "a space of musical possibilities", say in Python.
+
+During any practice session of tinkering with AMC, one is always working with some set of "preferred functions" in Python. "The space of musical possibilities" for that session, is given by a Cartesian Product of the valid "input space" of each function (the "input space" being a specified set or range of input values each function should act upon, chosen by the composer). 
+
+In each session of doing AMC, the set of functions one is working with usually tend to change, but the way in which one seeks to explore their "space of possibilities" is always the same. This never changes. 
+
+I'm looking for an implementation in Python, that isolates this part of AMC that doesn't change, into some kind of functional mechanism where the composer supplies the set of functions and preferred set of input values for each function, and the mechanism computes the "space of all possibilities" in an ordered way, for all combinations of input values, producing an output function that computes
+
+I'm looking for a implementation in Python, of a way to informally realize the "shared essence" of these two main ideas (Mazzola's and Leyton's discussed above), purely for pragmatic purposes. My goal is to more efficiently explore "a space of musical possibilities" for some set of Python functions and associated sets of input values. Utility is paramount, while adherence to mathematical formalism is unnecessary. 
