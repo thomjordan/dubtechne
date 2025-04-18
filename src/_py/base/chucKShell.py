@@ -1,202 +1,358 @@
 #!/opt/homebrew/Cellar/python@3.11/3.11.5/bin/python3 -i
-# %% [interactive]
-
 import subprocess
-import time
-import select
+import threading
+import pty
+import os
 import re
+import time
+import redis
+from datetime import datetime, timezone
 from collections import UserList
+from IPython.display import display, Markdown
 
-# For storing metadata as properties, on the list of shred_ids associated with particular ChucK file
-# Each time the same ChucK file is launched, a new shred_id gets added to the list associated with that file
-# and removed from the list when its associated shred is removed from the queue of actively-playing shreds
+'''--- Settings for launching ChucK VM as a subprocess ---'''
+
+#  preferred audio interfaces 
+volt      = 'Universal Audio: Volt 476P'
+blackhole = 'Existential Audio Inc.: BlackHole 2ch'
+
+'''---- M A N U A L L Y  S E T  O P T I O N S ----'''
+
+adc = None 
+dac = blackhole
+sample_rate = 48000 
+
+'''--- E N D  of  O P T I O N  S E T T I N G S ---'''
+
+# construct command-line args for selected options
+adc_arg = f'--adc:{adc}' if adc else ''
+dac_arg = f'--dac:{dac}' 
+srate_arg = f'--srate:{sample_rate}'
+args_for_launching_ChucK_with_adc = ['chuck', dac_arg, srate_arg, '--shell', adc_arg]
+args_for_launching_ChucK_adc_none = ['chuck', dac_arg, srate_arg, '--shell']
+args_for_launching_ChucK = args_for_launching_ChucK_with_adc if adc else args_for_launching_ChucK_adc_none
+
+# allocate a pseudo-terminal to trick ChucK into line-buffering
+master_fd, slave_fd = pty.openpty()
+
+# start ChucK subprocess using the slave end of the PTY
+chuck_process = subprocess.Popen(
+    args_for_launching_ChucK,
+    stdin=subprocess.PIPE,
+    stdout=slave_fd,
+    stderr=slave_fd,
+    text=True
+)
+
+# file wrapper around the master end so we can read output
+chuck_output = os.fdopen(master_fd)
+
+# namespace for sharing data between threads
+shared_vars = {}
+
+def print_to_jupyter(something):
+    """Prints to the VSCode Interactive Window"""
+    display(Markdown(f"{something}"))
+
+
 class ShredsList(UserList):
+    """For maintaining a list of active ChucK shreds associated with the same .ck file 
+
+    All shreds in the list are currently-playing instances of the same .ck file (a.k.a. the 'host'). 
+    It's worth noting that any child shreds sporked from WITHIN said file are not included in list, 
+      as their life-cycles are automatically managed by the parent.
+
+    The name of the host file can be stored as metadata on the list, via the '.name' property:
+
+    >> active_shreds = ShredsList([1, 2, 3], name="someChuckFile")
+
+    >> print(active_shreds)       --> [1, 2, 3]
+
+    >> print(active_shreds.name)  --> "someChuckFile"
+    
+    Each time the same ChucK file is launched, a new shred_id gets added to the list associated with said file.
+    A shred_id is removed from the list when its associated shred is removed from the VM's queue of actively-playing shreds.
+    """
+
     def __init__(self, data, **attrs):
         super().__init__(data)
         self.__dict__.update(attrs)
 
-# fauckPhiEnv_active_shreds = ShredsList([1, 2, 3], name="fauckPhiEnv")
-# print(fauckPhiEnv_active_shreds)         # [1, 2, 3]
-# print(fauckPhiEnv_active_shreds.name)    # "fauckPhiEnv"
+# open a redis client for akj's server
+redis = redis.Redis(host='76.18.119.54', port=6379, decode_responses=True, password='CloseToTheEdge')
 
-def get_shred_id(log_line: str) -> int:
-    """
-    Extracts the integer value that follows the pattern '(VM) sporking incoming shred: '
-    in the given log line.
+def extract_shred_id_and_filename_for_launched_shred(line):
+    sporked_shred_pattern = re.compile(r"\(VM\) sporking incoming shred: (\d+) \((.+)\.ck\)")
+    match = sporked_shred_pattern.search(line)
+    # returns (shred_id, filename_without_ext) if a match is found
+    if match: 
+        shred_id = int(match.group(1))
+        filename = match.group(2)
+        # print_to_jupyter(f'shred_id {shred_id} returned for newly-launched file: {filename}.ck')
+    return (shred_id, filename) if match else None
+
+def check_for_launched_shred_and_retain_id(line):
+    maybe_data = extract_shred_id_and_filename_for_launched_shred(line)
+    if not(maybe_data): return
+    (shred_id, filename) = maybe_data 
+    # since shred_id exists, we take steps below to store it in a pragmatically useful and meaningful way
+    # print_to_jupyter(f"Sporking file \'{filename}.ck\' returned shred_id [{shred_id}]")
+    # launching the filename successfully sporked a shred
+    # so we check if key exists in shared_vars 
+    # if it doesn't, we make a new (k,v) entry: a LIFO with filename as key
+    ensure_LIFO_exists_at_key(filename)
+    # we push shred_id onto "the top of the stack" (i.e. we append it to the back of the LIFO array)
+    shared_vars[filename] += [shred_id]
+    print_to_jupyter(f'{shared_vars[filename]} => {filename}')
+
+def extract_shred_id_and_filename_for_removed_shred(line):
+    removed_shred_pattern = re.compile(r"\(VM\) removing shred: (\d+) \((.+)\.ck\)")
+    match = removed_shred_pattern.search(line)
+    # returns (shred_id, filename_without_ext) if a match is found
+    if match: 
+        shred_id = int(match.group(1))
+        filename = match.group(2)
+        # print_to_jupyter(f'shred_id {shred_id} returned for newly-launched file: {filename}.ck')
+    return (shred_id, filename) if match else None
+
+def check_for_removed_shred_and_remove_its_id_from_shredlist(line):
+    if not(removing_shred_directly_by_id): return 
+    maybe_data = extract_shred_id_and_filename_for_removed_shred(line)
+    if not(maybe_data): return
+    (shred_id, filename) = maybe_data
+    print_to_jupyter(f'removed shred_id {shred_id} directly, from {filename}\'s shredlist')
+    shared_vars[filename].remove(shred_id)
+
+def check_for_ChucK_start_time(line):
+    pattern = r"chuck time:\s*(\d+)::samp"
+    #line = "chuck time: 850688::samp"
+    match = re.search(pattern, line)
+    return match.group(1) if match else None
+      
+def check_for_ChucK_start_time_and_update_Redis(line):
+    maybe_time = check_for_ChucK_start_time(line)
+    if maybe_time:
+        ts = datetime.now(timezone.utc).timestamp()
+        offset = int(maybe_time)/48000.0
+        redis.set("start_timestamp", f'{ts - offset}')
+        print_to_jupyter(f'Samples since ChucK start: {maybe_time}; timestamp: {ts}') 
+        print_to_jupyter(f'{offset} seconds offset; adjusted timestamp: {ts - offset}')
+
+def read_chuck_output():
+    """Background thread function to parse the output of the running ChucK shell subprocess and print it in the Jupyter interactive window.
     
-    Parameters:
-        log_line (str): The input string containing the log message.
-    
-    Returns:
-        int: The extracted integer value, or None if the pattern is not found.
+    Calls to specific functions are used to parse the ChucK shell output by looking for matches in regex patterns. 
+    Whenever one of these functions finds a match, it extracts any salient data for use within the function to complete its task.
     """
-    match = re.search(r'\(VM\) sporking incoming shred: (\d+)', log_line)
-    return int(match.group(1)) if match else None
+    # regex to strip out extraneous Markdown codes so they don't print as literals in the Jupyter console
+    ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
+    for line in iter(chuck_output.readline, ''):
+        cleaned_line = ansi_escape.sub('', line).strip()
+        if cleaned_line:
+            # if output shows that a new ChucK file was launched via a shell command, retain its shred_id
+            check_for_launched_shred_and_retain_id(line)
+            # if output shows that a shred_id has been removed, remove that id from its host filename's shredlist
+            check_for_removed_shred_and_remove_its_id_from_shredlist(line)
+            # when ChucK stats are queried (at the end of this file once the VM has started up)...
+            # ...this calculates the time that the VM has started, and updates the value in our shared Redis
+            # ...so that Aaron can easily sync to my ChucK process via him computing the current value of "now"
+            # ...which is based on the start time of the ChucK VM
+            check_for_ChucK_start_time_and_update_Redis(line)
+            print_to_jupyter(cleaned_line)
 
-
-# Example usage:
-# log_example = "(VM) sporking incoming shred: 42"
-# value = getShredID(log_example)
-# print(value)  # Output: 42
-
-# Start the ChucK shell subprocess
-process = subprocess.Popen(
-    ["chuck", "--dac:Universal Audio: Volt 476P", "--shell"],  # Start ChucK shell
-    stdin=subprocess.PIPE,  # Allow writing to stdin
-    stdout=subprocess.PIPE,  # Capture stdout
-    stderr=subprocess.PIPE,  # Capture stderr
-    text=True,  # Ensure text mode for easier interaction
-    bufsize=1,  # Line buffering for real-time output
-)
-
-def process_output():
-    output = read_output()
-    for line in output:
-        print(line)
-        maybe_id = check_for_launched_shred(line)
-    return maybe_id if maybe_id else None
-
-def check_for_launched_shred(str):
-    maybe_id = get_shred_id(str)
-    # print('check_for_launched_shred() returned', maybe_id if maybe_id else 'nothing')
-    return maybe_id if maybe_id else None
-
+# Start the reader thread
+read_chuck_stdout_thread = threading.Thread(target=read_chuck_output, daemon=True)
+read_chuck_stdout_thread.start()
 
 # Function to send a command to the ChucK shell
 def send_command(command):
-    """Send a command to the ChucK shell subprocess."""
-    process.stdin.write(command + '\n')
-    process.stdin.flush()  # Ensure command is sent immediately
-    time.sleep(0.3)  # Give some time for ChucK to process
-    try:
-        maybe_id = process_output()
-    except:
-        return None 
-    else: 
-        return maybe_id if maybe_id else None
+    """Sends a command to the ChucK shell subprocess."""
+    chuck_process.stdin.write(command + '\n')
+    chuck_process.stdin.flush()  # Ensure command is sent immediately
 
-
-def read_output():
-    """Read all available lines from ChucK's output without blocking."""
-    output_lines = []
-
-    # get lines from stdout
-    while True:         
-        ready, _, _ = select.select([process.stdout], [], [], 0.1)  # 0.1s timeout
-        if not ready:
-            break  # No more data to read
-        line = process.stdout.readline().strip()
-        if line:
-            output_lines.append(line)
-
-    # get lines from stderr
-    while True:       
-        ready, _, _ = select.select([process.stderr], [], [], 0.1)  
-        if not ready:
-            break  # No more data to read
-        line = process.stderr.readline().strip()
-        if line:
-            output_lines.append(line)
-
-    return output_lines
-
-# Example: Send a command to check the version of ChucK
-#send_command("^")
-
-# send_command("+ mesh2Dexample.ck")
+def print_ChucK_stats():
+    """Prints ChucK stats such as the value of 'now' (number of samples since VM started)"""
+    send_command("^")
 
 # Example: Load a simple sine oscillator script in real-time
-#send_command("{ 1::second => dur T; SinOsc s => dac; while (true) { T => now; } }")
+# send_command("{ 1::second => dur T; SinOsc s => dac; while (true) { T => now; } }")
+# send_command("+ mesh2Dexample.ck")
 
 # make a shortcut 
 sc = send_command
 
-# fauckPhiEnv = send_command("+ fauckPhiEnv.ck")
-# send_command(f"- {fauckPhiEnv}")
+def make_ChucK_arglist(voice_num, args_dict):
+    """Since ChucK files can be launched with any specified set of input arguments, this function constructs the argument list 
+    for appending onto a ChucK filename when launching said file as a shred.
+    
+    voice_num: an int specifying the number-of-shreds-of-this-file-already-playing, plus one.
+    This value can be considered the shred's 'voice num' w.r.t. the file, to distinguish it from other currently-playing instances of the same file.
+    
+    args_dict: a dictionary holding the argument values, added in the order that the ChucK file expects them."""
+
+    arglist = f':{voice_num}'
+    for key in args_dict:
+        arglist += f':{args_dict[key]}'
+    return arglist 
+
+class ChucKManagedFileShred:
+    """This class provides a decorator for functions which launch specific .ck files.
+    
+    All one needs to do is:
+    - create an empty function, whose name is identical to the .ck file it will be expected to launch upon invocation.
+    - if the .ck file expects arguments, specify these as kwargs with default values, in the same order that the .ck file expects them.
+
+    Then, when calling the function, one can supply any number of the specified keyword-args in any order, and this decorator class will launch the file with
+    its full list of expected arguments, using the default values for any remaining keyword-args not explicity provided in the function call.
+    """
+
+    def __init__(self, function):
+        self.function = function
+
+    def __call__(self, *args, **kwargs):
+        # << before function call >>
+        # since by convention, these file-launch functions are named after ChucK files,
+        # we assume that this is the case
+        chuck_filename = self.function.__name__
+
+        # if a ShredList doesn't already exist at key, make one
+        ensure_LIFO_exists_at_key(chuck_filename)
+        numshreds_in_list = get_LIFO_current_size(chuck_filename)
+
+        # we assign a voice_num based on how many shreds are currently playing for filename,
+        #   shreds that were launched directly by sending "+ {filename}" to the ChucK shell
+        voice_num = numshreds_in_list + 1
+
+        kwdefaults = self.function.__kwdefaults__
+        unified_params = kwdefaults
+
+        #print_to_jupyter(kwdefaults)
+        #print_to_jupyter(kwargs)
+
+        for key in kwargs:
+            unified_params[key] = kwargs[key]
+
+        #print_to_jupyter(unified_params)
+
+        # create a formatted arg string from voice_num and unified_params
+        argstr = make_ChucK_arglist(voice_num, unified_params) if unified_params else ()  
+
+        print_to_jupyter(f'\+ {chuck_filename}.ck{argstr}')
+
+        # spork the file with args
+        spork(chuck_filename, argstr) 
+
+        # finally, call function (decoratee), in case it contains its own statements
+        result = self.function(*args, **kwargs)
+
+        # << after function call >>
+        return result
 
 # ensure {symbol} evaluates to a LIFO (last in, first out) data-structure
-def ensure_symbol_evaluates_to_a_lifo(filename_as_symbol):
-    # filename_as_string = f"{filename_as_symbol}"
-    # if 'filename_as_symbol' is already defined, then we don't need to construct anything, and we can exit the function
-    if filename_as_symbol in globals(): return
-    # if 'filename_as_symbol' desn't exist yet, we construct it..
-    # ..assigning to it an empty ShredsList in the global namespace 
-    #print(f"LIFO created for \'{filename_as_symbol}\'")
-    exec(f"{filename_as_symbol} = ShredsList([], name=\'{filename_as_symbol}\')", globals()) 
-        
-# functions which spork specific .ck files
-def fauckPhiEnv_(suffix=None, *, oct=0, pulse=8, scale=1):
-    argstr = f':{oct}:{pulse}:{scale}'
-    spork('fauckPhiEnv', argstr, suffix)
+def ensure_LIFO_exists_at_key(filename):
+    # if 'filename' is already defined, then we don't need to construct anything, and we can exit the function
+    if filename in shared_vars: return
+    # if 'filename' desn't exist yet, we construct it..
+    # ..assigning to it an empty ShredsList in the shared_vars namespace 
+    #print_to_jupyter(f"LIFO created for \'{filename}\'")
+    shared_vars[filename] = ShredsList([], name=filename)
 
-def spork(filename, args=None, suffix=None):
+def get_LIFO_current_size(filename):
+    # based on how (and where) this function is used,
+    #  these next two lines should always be false; they are only included here for safety
+    if not(filename in shared_vars.keys()): return None
+    if not(type(shared_vars[filename]) is ShredsList): return None
+    return len(shared_vars[filename])
+
+def spork(filename, args=None):
     args = args if args else ''
     spork_file_command = f'send_command(\"+ {filename}.ck{args}\")'
-    # eval() returns the shred_id number if a new shred was successfully sporked
-    maybe_shred_id = eval(spork_file_command) 
-    # if there's no shred_id, exit
-    if not(maybe_shred_id): 
-        #print('No shred_id returned')
-        return 
-    # since shred_id exists, we take steps below to store it in a pragmatically useful and meaningful way
-    shred_id = maybe_shred_id
-    #print(f"Sporking file \'{filename}.ck\' returned shred_id [{shred_id}]")
-    # launching the filename successfully sporked a shred, so we construct a corresponding symbol-name from the filename with an optional suffix
-    suffix = f'_{suffix}' if suffix else ''
-    filename_as_symbol = f'{filename}{suffix}'
-    #print("\'filename_as_symbol\' has value:", filename_as_symbol)
-    # we ensure symbol evaluates to a LIFO; if it doesn't already exist, we make one
-    ensure_symbol_evaluates_to_a_lifo(filename_as_symbol)
-    # we push shred_id onto "the top of the stack" (i.e. we append it to the back of the LIFO array)
-    exec(f'{filename_as_symbol} += [{shred_id}]', globals())
-    print(eval(f'{filename_as_symbol}'), f'=> {filename_as_symbol}')
+    eval(spork_file_command)
 
-# cancel shred
-def xs(arg, nthpop=0):
-    # we can also remove the shred by directly providing its shred_id 
+# removing_shred_directly_by_id - a flag that indicates whether we are removing a shred directly by its id,
+#  or alternately, by its place in the host filename's shredlist (LIFO stack)
+# If the former, we must manually remove its id from the filename's shredlist, 
+#  by parsing the ChucK output that says that a shred has been removed.
+# If the latter, the xs() function will remove the shred based on its position in the stack, and not by its id.
+# In this case, the flag will ensure that the ChucK output will not trigger a removal, since it has already been done
+removing_shred_directly_by_id = True 
+
+def xs(arg, position=0):
+    """Cancels shred, either directly by shred_id, or by position in the host filename's shredlist stack.
+    
+    arg: either the explicit shred_id to cancel (int), or the name of the .ck file 
+    from whose ShredList we wish to remove the shred from, based on its position in the stack.
+
+    position: only relevant when arg is a str representing a .ck filename, this int value specifies the position 
+    from the back of the filename's associated ShredList (i.e. the 'top of the stack'), where the 0th position 
+    removes the most-recently-launched shred from said filename, the 1st position removes the second most-recently-launched shred, et al.
+    """
+
+    global removing_shred_directly_by_id
+    # we can remove the shred by directly providing its shred_id... 
     if isinstance(arg, int): 
-        send_command(f'- {arg}')
+        removing_shred_directly_by_id = True 
+        shred_id = arg
+        send_command(f'- {shred_id}')
         return
-    # if arg is not an int, we can assume it's a string representing the name of the .ck file that the shred is playing
-    # in that case, we know that a var has been created in its name (_{filenameNoExt}_), that is a list of playing shreds
+    # ...or we can remove it by providing its host's filename and position on the host's shredlist stack (relative to when it was launched)
+    # in this case, since arg is not an int we can assume it's a string: the name of the .ck file that the shred is playing (a.k.a. its "host")
+    ck_filename = arg
+    removing_shred_directly_by_id = False 
+    # we know that an entry in shared_vars has been created with this host filename as key, that is mapped to a list of playing shreds
     # we retrieve that list as local variable 'list_of_shreds':
-    list_of_shreds = arg
+    list_of_shreds = shared_vars[ck_filename] 
+    
     if not(isinstance(list_of_shreds, ShredsList)):
-        print(f"ERROR: {list_of_shreds.name} is not a ShredsList")
+        print_to_jupyter(f"ERROR: {list_of_shreds.name} is not a ShredsList")
         return
     elif len(list_of_shreds) == 0:
-        print(f"{list_of_shreds.name} has no more shreds to remove, it is an empty list")
+        print_to_jupyter(f"{list_of_shreds.name} has no more shreds to remove, it is an empty list")
         return
     else:
-        if nthpop >= len(list_of_shreds):
-            print(f"ERROR: {list_of_shreds.name} has only {len(list_of_shreds)} shreds, index {nthpop} is out-of-bounds")
+        if position >= len(list_of_shreds):
+            print_to_jupyter(f"ERROR: {list_of_shreds.name} has only {len(list_of_shreds)} shreds, index {position} is out-of-bounds")
             return
         else:  # remove the shred that is 'nthpop' places from the back of the list (i.e. the top of the stack)
-            send_command(f"- {list_of_shreds[-(nthpop+1)]}")
+            send_command(f"- {list_of_shreds[-(position+1)]}")
             #removed_shred_id = list_of_shreds.pop(-(nthpop+1))
-            list_of_shreds.pop(-(nthpop+1))
-            #print(f"Shred {removed_shred_id} was removed from the \'{list_of_shreds.name}\' playstack")
+            list_of_shreds.pop(-(position+1))
+            #print_to_jupyter(f"Shred {removed_shred_id} was removed from the \'{list_of_shreds.name}\' playstack")
             num_shreds_remaining = len(list_of_shreds)
             if num_shreds_remaining > 0:
-                print(list_of_shreds, f"<- {list_of_shreds.name} has {len(list_of_shreds)} shreds left on its stack")
+                print_to_jupyter(f"{list_of_shreds} <- {list_of_shreds.name} has {len(list_of_shreds)} shreds left on its stack")
             else:
-                print(f"{list_of_shreds.name} has no more active shreds on its stack")
+                print_to_jupyter(f"{list_of_shreds.name} has no more active shreds on its stack")
 
 # TODO: add logging, and if possible, a way to supply a dictionary of parameter values for that sporking, 
 #   then also have it archive those settings as a .json file with a timestamp, which later can be made relative to the start of any recording happening during that time
 
-# clean up: close the ChucK shell when done
+def xss(n): 
+    """Removes the first n shred_ids from the VM."""
+    [ xs(id+1) for id in range(n) ]
+
 def close():
+    """Cleans up and closes the ChucK shell when done."""
     send_command("chuck --kill")  # Send a kill command if needed
-    process.terminate()
-    process.wait()
+    chuck_process.terminate()
+    chuck_process.wait()
 
-'''
-while(True):
-    output = read_output()
-    for line in output:
-        print(line)
-    time.sleep(1)
-'''
+# display confirmation message that the ChucK subprocess started successfully
+display(Markdown("✅  **ChucK subprocess started**  ✅"))
 
-'''chuckShell.py'''
+# pause for a bit before querying the ChucK shell for its value of 'now' (how many samples since the VM started)
+time.sleep(3)
+
+# query ChucK shell for stats, use its reported value of 'now' to calculate the VM start time and send it to Redis
+print_ChucK_stats()  
+
+#-------------------------------------------------------# 
+
+# define functions for launching specific .ck files
+def fauckPhiEnv(*, oct=0, pulse=8, scale=1): ()
+def slicing(): () 
+
+# add decorators after function definitions to keep things neat
+fauckPhiEnv = ChucKManagedFileShred(fauckPhiEnv)
+slicing     = ChucKManagedFileShred(slicing)
+
