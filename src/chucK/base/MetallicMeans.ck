@@ -45,3 +45,20 @@ basetick / 2 / phi / phi                      => float phi1_;
 <<< "_phi1", _phi1, "phi1_", phi1_ >>>;
 <<< "-----------------------------" >>>;
 
+96. => global float bpm;
+15000::ms / bpm => dur sixteenth; // 16th-note pulse @ 96 bpm
+sixteenth * 4 => dur beat;
+sixteenth * 2 => dur eighth;
+beat * 8 => dur twoBars;
+     
+fun dur th(int durtype) {
+    beat * 4 => dur wholeNote;
+    wholeNote / (durtype$float) => dur result;
+    return result;
+}
+fun dur th(float durtype) {
+    beat * 4 => dur wholeNote;
+    wholeNote / durtype => dur result;
+    return result;
+}
+

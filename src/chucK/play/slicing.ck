@@ -1,7 +1,9 @@
-@import "globals"       // as 'g'
-@import "tuning"        // as 'tun'
-@import "launchControl" // as 'lc'
-@import "midi"
+// "/Users/artspace/Development/dubtechne/dubtechne/src/chucK/base/" => string import_path;
+
+@import "../base/globals"       // as 'g'
+@import "../base/tuning"        // as 'tun'
+@import "../base/launchControl" // as 'lc'
+@import "../base/midi"
 
 1 => int instActive;
 
@@ -133,7 +135,8 @@ iterativeTranspose(pattern16, 8, 6) @=> int it6Pattern16[];
 60.300566478845942 => float goldenMeanish;
 57.2924            => float squarishGoldenMean;
 
-me.dir() + "soundscapes/NGC_3982.wav" => string filename;
+// me.dir() + "soundscapes/NGC_3982.wav" => string filename;
+"../../../../sounds/soundscapes/NGC_3982.wav" => string filename;
 
 <<< filename >>>;
 
@@ -415,8 +418,8 @@ while(true) {
 
 fun void handleMidi() 
 {
-    // number of the local midi device to open (do: 'chuck --probe' on command-line for device-list)
-    8 => int device; // LaunchControl
+    // name of the local midi device to open (do: 'chuck --probe' on command-line for device-list)
+    "Launch Control XL" => string device; // LaunchControl
     
     MidiIn midiInput; // the midi input event listener
     MidiMsg midiMsg;  // the message for retrieving data
@@ -425,7 +428,7 @@ fun void handleMidi()
     if( !midiInput.open( device ) ) me.exit();
     
     // print out device that was opened
-    <<< "midi device:", midiInput.num(), " -> ", midiInput.name() >>>;
+    <<< "midi device:", midiInput.name(), ": midi_input #", midiInput.num() >>>;
     
     Shred shredsInPlay[0];
     

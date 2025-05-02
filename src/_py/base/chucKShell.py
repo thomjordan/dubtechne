@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from collections import UserList
 from IPython.display import display, Markdown
 
+chucK_play_dir = '/Users/artspace/Development/dubtechne/dubtechne/src/chucK/play/'
+
 '''--- Settings for launching ChucK VM as a subprocess ---'''
 
 #  preferred audio interfaces 
@@ -19,7 +21,7 @@ blackhole = 'Existential Audio Inc.: BlackHole 2ch'
 '''---- M A N U A L L Y  S E T  O P T I O N S ----'''
 
 adc = None 
-dac = blackhole
+dac = volt
 sample_rate = 48000 
 
 '''--- E N D  of  O P T I O N  S E T T I N G S ---'''
@@ -48,7 +50,9 @@ chuck_process = subprocess.Popen(
 chuck_output = os.fdopen(master_fd)
 
 # namespace for sharing data between threads
-shared_vars = {}
+vars = {}
+
+# function for printing to interactive window
 
 def print_to_jupyter(something):
     """Prints to the VSCode Interactive Window"""
@@ -79,7 +83,9 @@ class ShredsList(UserList):
         self.__dict__.update(attrs)
 
 # open a redis client for akj's server
-redis = redis.Redis(host='76.18.119.54', port=6379, decode_responses=True, password='CloseToTheEdge')
+# redis = redis.Redis(host='76.18.119.54', port=6379, decode_responses=True, password='CloseToTheEdge')
+# open local redis client
+redis = redis.Redis(host='127.0.0.1', port=6379, decode_responses=True)
 
 def extract_shred_id_and_filename_for_launched_shred(line):
     sporked_shred_pattern = re.compile(r"\(VM\) sporking incoming shred: (\d+) \((.+)\.ck\)")
@@ -102,8 +108,8 @@ def check_for_launched_shred_and_retain_id(line):
     # if it doesn't, we make a new (k,v) entry: a LIFO with filename as key
     ensure_LIFO_exists_at_key(filename)
     # we push shred_id onto "the top of the stack" (i.e. we append it to the back of the LIFO array)
-    shared_vars[filename] += [shred_id]
-    print_to_jupyter(f'{shared_vars[filename]} => {filename}')
+    vars[filename] += [shred_id]
+    print_to_jupyter(f'{vars[filename]} => {filename}')
 
 def extract_shred_id_and_filename_for_removed_shred(line):
     removed_shred_pattern = re.compile(r"\(VM\) removing shred: (\d+) \((.+)\.ck\)")
@@ -121,7 +127,7 @@ def check_for_removed_shred_and_remove_its_id_from_shredlist(line):
     if not(maybe_data): return
     (shred_id, filename) = maybe_data
     print_to_jupyter(f'removed shred_id {shred_id} directly, from {filename}\'s shredlist')
-    shared_vars[filename].remove(shred_id)
+    vars[filename].remove(shred_id)
 
 def check_for_ChucK_start_time(line):
     pattern = r"chuck time:\s*(\d+)::samp"
@@ -251,22 +257,22 @@ class ChucKManagedFileShred:
 # ensure {symbol} evaluates to a LIFO (last in, first out) data-structure
 def ensure_LIFO_exists_at_key(filename):
     # if 'filename' is already defined, then we don't need to construct anything, and we can exit the function
-    if filename in shared_vars: return
+    if filename in vars: return
     # if 'filename' desn't exist yet, we construct it..
     # ..assigning to it an empty ShredsList in the shared_vars namespace 
     #print_to_jupyter(f"LIFO created for \'{filename}\'")
-    shared_vars[filename] = ShredsList([], name=filename)
+    vars[filename] = ShredsList([], name=filename)
 
 def get_LIFO_current_size(filename):
     # based on how (and where) this function is used,
     #  these next two lines should always be false; they are only included here for safety
-    if not(filename in shared_vars.keys()): return None
-    if not(type(shared_vars[filename]) is ShredsList): return None
-    return len(shared_vars[filename])
+    if not(filename in vars.keys()): return None
+    if not(type(vars[filename]) is ShredsList): return None
+    return len(vars[filename])
 
 def spork(filename, args=None):
     args = args if args else ''
-    spork_file_command = f'send_command(\"+ {filename}.ck{args}\")'
+    spork_file_command = f'send_command(\"+ {chucK_play_dir}{filename}.ck{args}\")'
     eval(spork_file_command)
 
 # removing_shred_directly_by_id - a flag that indicates whether we are removing a shred directly by its id,
@@ -301,7 +307,7 @@ def xs(arg, position=0):
     removing_shred_directly_by_id = False 
     # we know that an entry in shared_vars has been created with this host filename as key, that is mapped to a list of playing shreds
     # we retrieve that list as local variable 'list_of_shreds':
-    list_of_shreds = shared_vars[ck_filename] 
+    list_of_shreds = vars[ck_filename] 
     
     if not(isinstance(list_of_shreds, ShredsList)):
         print_to_jupyter(f"ERROR: {list_of_shreds.name} is not a ShredsList")
@@ -341,18 +347,52 @@ def close():
 display(Markdown("✅  **ChucK subprocess started**  ✅"))
 
 # pause for a bit before querying the ChucK shell for its value of 'now' (how many samples since the VM started)
-time.sleep(3)
+time.sleep(1)
 
 # query ChucK shell for stats, use its reported value of 'now' to calculate the VM start time and send it to Redis
 print_ChucK_stats()  
 
-#-------------------------------------------------------# 
+# programmatically decorate all functions in 'chucKLaunchableFiles.py':
+from chucKLaunchableFiles import *
+import sh
 
-# define functions for launching specific .ck files
-def fauckPhiEnv(*, oct=0, pulse=8, scale=1): ()
-def slicing(): () 
+def get_list_of_launchable_file_func_names():
+    """Returns a list of names of functions defined in chucKLaunchableFiles.py"""
 
-# add decorators after function definitions to keep things neat
-fauckPhiEnv = ChucKManagedFileShred(fauckPhiEnv)
-slicing     = ChucKManagedFileShred(slicing)
+    grep = sh.Command('grep')
+    funcs_str = grep('^def', 'chucKLaunchableFiles.py')
+    funcs_raw_strings_list = funcs_str.split(':')
+    extract_funcs_pattern = re.compile(r"def (\w+)\(")
+    func_names_list = []
+    for f in funcs_raw_strings_list:
+        match = extract_funcs_pattern.search(f)
+        if match: func_names_list.append(match.group(1))
+    return func_names_list
 
+def get_statements_to_decorate_launchable_file_funcs():
+    """Returns a list of statements to execute, for programmatically adding the 'ChucKManagedFileShred' decorator to
+    each function in 'chucKLaunchableFiles.py'. 
+    
+    Since exec() does not seem to work within a loop within a function, we need to explicity create a list of the code 
+    statements we need, then execute them by using exec() in a top-level loop.
+    
+    Why go to all this trouble simply to add this decorator? 
+    
+    This allows us to create functions for launching specific .ck files, just once in 'chucKLaunchableFiles.py', and 
+    this will add the decorator programmatically to all functions in that file. This, combined with the functionality 
+    added with the ChucKManagedFileShred decorator (only needing to specify the function name and signature, where the 
+    decorator does all the heavy-lifting), provides a super-lightweight way to launch .ck files based only upon the
+    file's name (derived from the function's name), and the function's signature which specifies keyword args and default values.
+    """
+
+    func_names = get_list_of_launchable_file_func_names()
+    statements = []
+    for func_name in func_names:
+        statements.append( f"{func_name} = ChucKManagedFileShred({func_name})" )
+    return statements
+
+statements_to_execute = get_statements_to_decorate_launchable_file_funcs() 
+for s in statements_to_execute: exec(s)
+
+# Success!!
+print_to_jupyter("Yipee!!")

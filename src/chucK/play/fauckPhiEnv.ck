@@ -1,3 +1,9 @@
+// bpm = 96.0
+// numbeats_in_sync_period = 8
+
+// sync_period = 60.0 * numbeats_in_sync_period / bpm
+// seconds_to_wait_before_next_sync_boundary = sync_period - ((local_system_time - chuck_start_time_in_redis) % sync_period)
+
 96. => float bpm;
 15000::ms / bpm => dur sixteenth; // 16th-note pulse @ 96 bpm
 sixteenth * 4 => dur beat;
@@ -20,8 +26,8 @@ fun dur th(float durtype) {
     return result;
 }
 
-[1., 1.066666666666667, 1.2, 1.333333333333333, 1.5, 1.6, 1.8, 2.] @=> float scl1[];
-[1., 1.053497942386831, 1.185185185185185, 1.333333333333333, 1.5, 1.580246913580247, 1.8, 2.] @=> float scl2[];
+[1., 1.066666666666667, 1.2, 1.333333333333333, 1.6, 1.8, 2.] @=> float scl1[];
+[1., 1.053497942386831, 1.185185185185185, 1.333333333333333, 1.580246913580247, 1.8, 2.] @=> float scl2[];
 [scl1, scl2] @=> auto scales[][];
 
 //54.=> float baseFreq;
@@ -92,10 +98,10 @@ while( true )
     offsetDelayForCurrentNote => now; // advance time (i.e. "delay note") by the offset
     
     // choose a random pitch from the scale
-    //scale[Math.random2(0, scale.size()-1)]*baseFreq*Math.pow(2,octave) => float noteFreq;
+    scale[Math.random2(0, scale.size()-1)]*baseFreq*Math.pow(2,octave) => float noteFreq;
  
     // ...or step through the scale
-    scale[scale_step % scale.size()] * baseFreq*Math.pow(2,octave) => float noteFreq;
+    //scale[scale_step % scale.size()] * baseFreq*Math.pow(2,octave) => float noteFreq;
     noteFreq => saw.freq;
   
     // advance step

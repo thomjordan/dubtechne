@@ -1,0 +1,91 @@
+view_controller: 
+
+A view_controller manages a single root view, which may itself contain any number of subviews. 
+User interactions with that view hierarchy are handled by your view_controller, which coordinates 
+with other objects of your app as needed. 
+
+Every app has at least one view_controller whose content fills the main window. 
+If your app has more content than can fit onscreen at once, use multiple view_controllers 
+to manage different parts of that content.
+
+A container view_controller embeds the content of other view_controllers into its own root view. 
+A container view_controller may mix custom views with the contents of its child view_controllers 
+to facilitate navigation or to create unique interfaces. 
+
+For example, a NavigationController object manages a navigation bar and a stack of child view_controllers 
+(only one of which is visible at a time), and provides an API to add and remove child view_controllers from the stack.
+
+Several standard view_controllers may be provided for navigation and managing specific types of content. 
+You define the view_controllers containing your app's custom content. 
+You may also define custom container view_controllers to implement new navigation schemes.
+
+Our example function that makes a button is defined on the view_controller (or in its extension),
+because the view_controller is the one that instantiates the button.
+
+Following the same principle, the function that makes the view_controller could be defined on a type which will 
+be instantiating the view_controller. 
+
+However, since a view_controller can be instantiated from many places, it would be wasteful to have each such place 
+implement the same make function. 
+
+A better way would be to implement it at only one place - on the view_controller itself, now of course as a static function.
+
+One can do the same for views, too. If there is a button that repeats throughout the app and which 
+does not require a subclass, we can implement it as a static make function on the Button itself.
+
+Let us continue with the experiment. Now that we have a function that creates the view_controller,
+how do we actually make it do the stuff it was meant to do? 
+
+We want it to display the user data represented by the user service. 
+We can try passing in the service and see what can we do with it.
+
+There are two cases regarding the data:
+
+The data that is available at the binding time can be just assigned to the view_controller... 
+...while the data that is available asynchronously should be bound to the view_controller (or its subviews).
+
+We are directly binding the reactive business logic data of the business logic layer to the View, 
+while at the same time we keep those layers completely oblivious of each other. 
+The only piece of code that is aware of both layers is this one function.
+
+Business logic layer data and events flow from the Service to the ViewController, 
+while user actions and user input flow from the ViewController to the Service. 
+
+We have solved the problem of Service data flow by assignments and bindings, but how do we handle user action and user input? 
+
+How do we make tapping the "Log Out" button call the logOut() function on the UserService? 
+
+Well, since we are leveraging functional reactive programming and making it a first-class citizen, 
+there is really no problem to solve there. 
+
+Just make a function of the service an observer of the user action or user input.
+
+I like to call this function the Binder because it binds two architectural layers together. 
+The example we built is a template that can scale no matter how complex the Service or the ViewController are, 
+as long as you follow the three rules we empirically deduced:
+
+ -- Assign Service data that is available at the binding time to the ViewController
+ -- Bind Service data or events that are available asynchronously (as Signals/Observables) to the ViewController
+ -- Observe user actions or user input from the ViewController with the instance methods of the Service
+
+With those three rules you can implement any Binder, i.e. connect any Service to any ViewController.
+Through those three rules you express your applications logic - what loads when, what displays where, what formats how, etc. 
+It really is as simple as that.
+
+How do we manage the various services and their (inter)dependencies, any of which may suddenly become active
+as a result of the user's navigation within the App's View hierarchy?
+
+A general solution is to have a dependency_provider and pass that to the binders. 
+A dependency_provider is just a top_level_service (the peak of our pyramid) like a session object, 
+or another object that owns or makes dependencies.
+
+The most straightforward approach is to simply create a main_service which 
+owns and manages all the component services the app may need to engage with.
+
+If data needs to be shared among multiple services, instantiate each one with a shared Client object.
+
+makeViewController(main_service): Instantiates a view_controller, configures it and returns it.
+
+We call this function a "binder":
+It creates and configures the view_controller. 
+It binds the data from the service to the view_controller and user actions from the view_controller to the service. 

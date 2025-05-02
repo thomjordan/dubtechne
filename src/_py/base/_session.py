@@ -1,25 +1,25 @@
 # %% [interactive]
-fauckPhiEnv(oct=0, pulse=4)
+fauckPhiEnv(oct=2, pulse=16)
 
 # %%
 slicing()
 
 # %%
-
-xss(2)
+xss(5)
 
 # %%
-get_samples_since_VM_start()
+print(shared_vars["slicing"])
+
+# %%
+sc("{ <<< me.sourceDir() >>>; }")
 
 # %%
 import redis
-redis = redis.Redis(host='76.18.119.54', port=6379, decode_responses=True, password='CloseToTheEdge')
+# redis = redis.Redis(host='76.18.119.54', port=6379, decode_responses=True, password='CloseToTheEdge')
+redis = redis.Redis(host='127.0.0.1', port=6379, decode_responses=True)
 
 print(redis.keys("*"))
-
-# redis.set("hello_friend", "This is really cool!")
-print(redis.get("hello_friend"))
-print(redis.get("start_timestamp"))
+print('start_timestamp:', redis.get("start_timestamp"))
 
 # %%
 sc("^")
@@ -32,191 +32,143 @@ xs('fauckPhiEnv')
 sc("{4 => octave;}")
 
 # %%
-[ us(id) for id in fauckPhiEnv ]
+[ xs(id) for id in vars['slicing']]
+
+# %%
+class ParametricContext:
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+
+    def __call__(self, lambdafunc):
+        return lambdafunc(*self.args, **self.kwargs) # [-3]
+
+foo = ParametricContext(2, 3, 5)(lambda w, x, y: (
+    a := (w * x)**y,
+    z := w + x + y,
+    x * z 
+))
+
+bar = ParametricContext(2, 4, 6)
+
+print(foo)
+print(bar(lambda a, b, c :( a**b**c )))
+
+# %%
+f = lambda x : (
+    x * f(x-1) 
+    if x != 1 
+    else 1
+)
+f(8)
+
+# %%
+f = lambda x, a = 1 : [ a := a * b for b in range(1, x+1) ][-1]
+f(8) #/ 5760.0
+# %%
+362880.0 / 720.0
+
+# %%
+import re
+import codecs
+import encodings
+import functools
+
+
+def defify(txt):
+    first, rest = txt.split('\n', maxsplit=1)
+    _, fname, args = re.findall(r"((\w+)\s*=\s*)?lambda\s*(.*)\s*:", first).pop()
+    return f"def {fname or '_'}({args}):\n" + rest
+
+
+def transform(string, decode_mode):
+    if isinstance(string, bytes):
+        string = string.decode("utf-8")
+    txt = string.splitlines(keepends=True)[::-1]
+    length = len(txt)
+    lines = ""
+
+    while txt:
+        lambda_buffer = []
+        line = txt.pop()
+        line = line.replace('λ', "lambda")
+
+        if newlined_lambda := re.search(r"lambda.*:\s*\n", line):
+            lambda_buffer = [line]
+            header = line # to keep track of lambda's definition line contents
+            lambda_start, _ = newlined_lambda.span()
+
+            assert txt, "Unexpected EOF"
+            line = txt.pop()
+
+            lfspaces = re.search(r"(\s*)", line)
+            assert lfspaces
+            spaces = lfspaces.group()
+
+            while line.startswith(spaces):
+                lambda_buffer.append(line)
+                lines += "\n" # here i push newlines to make up for loss of lines when inlining the lambda call,
+                              # otherwise exception traceback would show wrong line number
+                if not txt:
+                    break
+                line = txt.pop()
+
+            transformed = header[:lambda_start] + f"type(lambda:1)(compile({repr(defify(''.join(lambda_buffer)))}, '<preprocessed lambda>', 'single').co_consts[0], globals())\n"
+            lines += transformed + line
+
+        else:
+            if re.search(r"lambda.*:\s*return .*\n", line):
+                line = re.sub("return", "", line)
+
+            elif re.search(r"lambda.*:\s*yield .*\n", line):
+                line = re.sub(r"yield (.*)", r"(yield \1)", line)
+
+            lines += line
+
+    return (lines, length) if decode_mode else bytes(lines, 'utf-8')
+
+
+decoder = functools.partial(transform, decode_mode=True)
+encoder = functools.partial(transform, decode_mode=False)
+
+
+class IncrementalDecoder(encodings.utf_8.IncrementalDecoder):
+    def decode(self, string, final=False):
+        self.buffer += string
+        if final:
+            buffer = self.buffer
+            self.buffer = b""
+            return super().decode(encoder(buffer))
+        return ""
+
+
+def superlambda_codec(encoding):
+    if encoding == "superlambda":
+        return codecs.CodecInfo(
+            name="superlambda",
+            encode=encodings.utf_8.encode,
+            decode=decoder,
+            incrementaldecoder=IncrementalDecoder,
+        )
+
+codecs.register(superlambda_codec)
+
+#'''
+m = lambda n: (
+    if n == 1:
+        return n
+    return n * m(n-1))
+#'''
+# %%
+
+val = 0
+
+msg = "ON" if val else "OFF"
+
+print(msg)
+
 
 # %%
 
-yo = 5
-
-da = eval(f'{yo}')
-
-da + da 
-
-# %%
-def xss(n): [ xs(id+1) for id in range(n) ]
-
-[ print(id+1) for id in range(2) ]
-
-# %%
-foo = 5
-print('Yo!', foo)
-
-# %%
-
-print(f'the answer is {5 if False else "hoot!"}')
-#print(f'the answer is {yo}')
-
-# %%
-arr = [1, 2, 3]
-
-print(f'arr has {len(arr)} elements: {arr}')
-
-print(len(arr) * 1000)
-
-if isinstance(arr, list):
-    print("arr is a list.")
-else:
-    print("arr is not a list.")
-# %%
-foo = 5; bar = 6
-foo + bar
-
-# %%
-
-arr = [1, 2, 3]
-
-print(f"\'{arr}\' has {len(arr)} shreds on its stack: {arr} <-- (top of the stack)")
-# %%
-
-from varname import varname
-
-def func():
-  return varname()
-
-# In external uses
-xwow = func() # 'x'
-y = func() # 'y'
-
-x = xwow 
-print(x)
-
-def ho(aname):
-    try:
-        _ = aname
-    except:      
-        print(f"ERROR: it doesn't exist")
-        return
-
-ho(yo)
-
-
-# %%
-
-from collections import UserList
-
-class MyList(UserList):
-    def __init__(self, data, **attrs):
-        super().__init__(data)
-        self.__dict__.update(attrs)
-
-my_array = MyList([1, 2, 3], name="my_array")
-
-print(my_array)        
-print(my_array.name)   
-
-my_array += [4, 5, 6, 7, 8]
-my_array.name = "my_bigger_array"
-
-print(my_array)         
-print(my_array.name)   
-
-print(isinstance(my_array, MyList)) 
-
-print(my_array[-8])
-print(len(my_array))
-
-print(my_array.pop(-3))
-print(my_array.pop(-5))
-print(my_array)         
-print(my_array.name)
-
-# %%
-
-str(yo)
-
-
-# %%
-
-print(isinstance(5, int))
-
-
-# %%
-
-class CubeCalculator:
-    def __init__(self, function):
-        self.function = function
-
-    def __call__(self, *args, **kwargs):
-
-        # before function
-        print("calling", self.function.__name__, "with input arg", args[0])
-        print(type(self.function.__name__))
-
-        # function (decoratee) called
-        result = self.function(*args, **kwargs)
-
-        # after function
-        print("double the arg is:", args[0]*2)
-
-        return result
-
-# adding class decorator to the function
-@CubeCalculator
-def get_cube(n):
-    print("Input number:", n)
-    return n * n * n
-
-print("Cube of number:", get_cube(100))
-
-# %%
-
-def make_ChucK_arglist(args_dict):
-    arglist = ''
-    for key in args_dict:
-        arglist += f':{args_dict[key]}'
-    return arglist 
-
-class ChucKManagedFileShred:
-    def __init__(self, function):
-        self.function = function
-
-    def __call__(self, *args, **kwargs):
-        # before function call
-        name = self.function.__name__
-
-        kwdefaults = self.function.__kwdefaults__
-        unified_params = kwdefaults
-
-        print(kwdefaults)
-        print(kwargs)
-
-        for key in kwargs:
-            unified_params[key] = kwargs[key]
-
-        print(unified_params)
-        arglist = make_ChucK_arglist(unified_params)
-
-        print(arglist)
-
-        # function (decoratee) called
-        result = self.function(*args, **kwargs)
-
-        # after function
-        return result
-
-    
-@ChucKManagedFileShred
-def testCMFS(*, oct=0, pulse=8, scale=1): () 
-
-
-testCMFS(oct=7, pulse=16)
-
-
-# %%
-yo = ShredsList([], name='yo')
-print(type(yo) is ShredsList)
-
-foo = dict(name='_yo_', contents=yo)
-print('name' in foo.keys())
-
+True + True * False
 # %%
