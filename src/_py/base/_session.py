@@ -1,11 +1,17 @@
 # %% [interactive]
-fauckPhiEnv(oct=2, pulse=16)
+fauckPhiEnv(oct=0, pulse=8)
 
 # %%
 slicing()
 
 # %%
-xss(5)
+xss(20)
+
+#%%
+xs('fauckPhiEnv')
+
+#%%
+xs('slicing')
 
 # %%
 print(shared_vars["slicing"])

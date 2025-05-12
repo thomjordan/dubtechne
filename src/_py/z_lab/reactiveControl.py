@@ -1,10 +1,12 @@
-import wx
-import rtmidi
-from wxVolumeControl import * 
-from reactivex.subject import Subject
-from reactivex import operators as ops
-from typing import Protocol, TypeAlias
 from collections import namedtuple
+from typing import Protocol, TypeAlias
+
+import rtmidi
+import wx
+from reactivex import operators as ops
+from reactivex.subject import Subject
+from wxVolumeControl import *
+
 
 class Datasource(Protocol):
     """The Datasource type guarantees that the implementing object has a reactive 'subject' field"""
@@ -17,11 +19,11 @@ class MidiCCListenerService(Datasource):
         # Subject() is an object that is both an observable sequence as well as an observer,
         #   where each notification is broadcasted to all subscribed observers.
         self.subject = Subject()
-        self.device  = device
-        self.cc_num  = cc_num
+        self.device = device
+        self.cc_num = cc_num
         self.midi_in = rtmidi.MidiIn()
         self.devices = self.midi_in.get_ports()
-        self.midi_in.set_callback(self.midi_callback)
+        self.midi_in.set_callback(self.midi_callback) 
 
     def start(self):
         if self.device >= len(self.devices):
@@ -48,7 +50,7 @@ class MidiNoteButtonListenerService(Datasource):
         # Subject() is an object that is both an observable sequence as well as an observer,
         #   where each notification is broadcasted to all subscribed observers.
         self.subject = Subject()
-        self.device  = device
+        self.device = device
         self.notenum = notenum
         self.midi_in = rtmidi.MidiIn()
         self.devices = self.midi_in.get_ports()
@@ -140,8 +142,8 @@ class LaunchControlFrame(wx.Frame):
             return button
         
         # for knobs and faders
-        def subscribe_and_bind(rowname:str, colnum:int, event_type):
-            on_gui_control_change_handler   = self.create__on_gui_control_change__handler(rowname, colnum)
+        def subscribe_and_bind(rowname: str, colnum: int, event_type):
+            on_gui_control_change_handler = self.create__on_gui_control_change__handler(rowname, colnum)
             update_gui_control_from_subject = self.create__update_gui_control_from_subject(rowname, colnum)
 
             self.controls[rowname][colnum].UI.Bind(event_type, on_gui_control_change_handler)
@@ -152,8 +154,8 @@ class LaunchControlFrame(wx.Frame):
 
         # for buttons
         def subscribe_and_bind_button(rowname:str, colnum:int):
-            on_gui_button_down_handler     = self.create__on_gui_button_down__handler(rowname, colnum)
-            on_gui_button_up_handler       = self.create__on_gui_button_up__handler(rowname, colnum)
+            on_gui_button_down_handler = self.create__on_gui_button_down__handler(rowname, colnum)
+            on_gui_button_up_handler = self.create__on_gui_button_up__handler(rowname, colnum)
             update_gui_button_from_subject = self.create__update_gui_button_from_subject(rowname, colnum)
 
             self.controls[rowname][colnum].Bind(wx.EVT_LEFT_DOWN, on_gui_button_down_handler)
@@ -166,10 +168,10 @@ class LaunchControlFrame(wx.Frame):
         # create gui controls and add them to the controls dictionary
         x_offset = 15; y_offset = 14; x_spacer = 47; y_spacer = 56
         for index in range(0,8):
-            top_knob   =   makeKnob(pos=(x_spacer*index+x_offset, y_offset))  
-            mid_knob   =   makeKnob(pos=(x_spacer*index+x_offset, y_offset+y_spacer))  
-            low_knob   =   makeKnob(pos=(x_spacer*index+x_offset, y_offset+y_spacer*2))  
-            fader      =  makeFader(pos=(x_spacer*index+38,188))
+            top_knob = makeKnob(pos=(x_spacer*index+x_offset, y_offset))  
+            mid_knob = makeKnob(pos=(x_spacer*index+x_offset, y_offset+y_spacer))  
+            low_knob = makeKnob(pos=(x_spacer*index+x_offset, y_offset+y_spacer*2))  
+            fader = makeFader(pos=(x_spacer*index+38,188))
             top_button = makeButton(pos=(x_spacer*index+21,188+fader_height+42))
             low_button = makeButton(pos=(x_spacer*index+21,188+fader_height+67))
             self.controls["knobs_top"]   += [top_knob]
@@ -245,20 +247,18 @@ class LaunchControlFrame(wx.Frame):
                 self.controls[rowname][index].SetLabel(str(value))
         return _safe_update_gui_button
 
-
 midi_in_device = 8
-
 
 def setup_listeners() -> DatasourceDict:
     listeners: DatasourceDict = dict(knobs_top=[], knobs_mid=[], knobs_low=[], faders=[], buttons_top=[], buttons_low=[])
-    for cc in range(13, 21): listeners["knobs_top"]   += [ MidiCCListenerService(device=midi_in_device, cc_num=cc) ]
-    for cc in range(29, 37): listeners["knobs_mid"]   += [ MidiCCListenerService(device=midi_in_device, cc_num=cc) ]
-    for cc in range(49, 57): listeners["knobs_low"]   += [ MidiCCListenerService(device=midi_in_device, cc_num=cc) ]
-    for cc in range(77, 85): listeners["faders"]      += [ MidiCCListenerService(device=midi_in_device, cc_num=cc) ]
-    for nn in range(41, 45): listeners["buttons_top"] += [ MidiNoteButtonListenerService(device=midi_in_device, notenum=nn) ]
-    for nn in range(57, 61): listeners["buttons_top"] += [ MidiNoteButtonListenerService(device=midi_in_device, notenum=nn) ]
-    for nn in range(73, 77): listeners["buttons_low"] += [ MidiNoteButtonListenerService(device=midi_in_device, notenum=nn) ]
-    for nn in range(89, 93): listeners["buttons_low"] += [ MidiNoteButtonListenerService(device=midi_in_device, notenum=nn) ]
+    for cc in range(13, 21): listeners["knobs_top"]   += [MidiCCListenerService(device=midi_in_device, cc_num=cc) ]
+    for cc in range(29, 37): listeners["knobs_mid"]   += [MidiCCListenerService(device=midi_in_device, cc_num=cc) ]
+    for cc in range(49, 57): listeners["knobs_low"]   += [MidiCCListenerService(device=midi_in_device, cc_num=cc) ]
+    for cc in range(77, 85): listeners["faders"]      += [MidiCCListenerService(device=midi_in_device, cc_num=cc) ]
+    for nn in range(41, 45): listeners["buttons_top"] += [MidiNoteButtonListenerService(device=midi_in_device, notenum=nn) ]
+    for nn in range(57, 61): listeners["buttons_top"] += [MidiNoteButtonListenerService(device=midi_in_device, notenum=nn) ]
+    for nn in range(73, 77): listeners["buttons_low"] += [MidiNoteButtonListenerService(device=midi_in_device, notenum=nn) ]
+    for nn in range(89, 93): listeners["buttons_low"] += [MidiNoteButtonListenerService(device=midi_in_device, notenum=nn) ]
     [listener.start() for listener in listeners["knobs_top"]]
     [listener.start() for listener in listeners["knobs_mid"]]
     [listener.start() for listener in listeners["knobs_low"]]

@@ -214,7 +214,7 @@ startPosInSec * srate => float startPosition;
 // 'resolution' denotes the number of pulses (in this case 16th-notes) between consecutively-indexed slices
 // this is effectively the smallest resolution used in calculating the sound buffer position, from the interaction of the slice-index pattern and realtime midi controller knob
 //  i.e. 'slice 6' jumps to '6 * resolution' 16th-notes into the source material
-4  => int resolution;
+1  => int resolution;
 
 2048 => int totalNumberOf16thNotesInClipPlaybackArea;
  128 => int numberOfControllerValues;
@@ -229,7 +229,7 @@ totalNumberOf16thNotesInClipPlaybackArea / resolution => int totalNumberOfSlices
 96.0 => float playBPM;
 15.0::second / playBPM => dur _16th_;
 
-g.makeSwing(copperMeanish, _16th_);
+g.makeSwing(50.0, _16th_);
 
 <<< "_16th_:", _16th_ >>>;
 
@@ -251,11 +251,11 @@ spork ~ handleMidi();
 <<< "envDecayRandomMax:", envDecayRandomMax >>>;
 
 
-2.618::ms => NGC3925.globAttackTime;
+0.618::ms => NGC3925.globAttackTime;
 _16th_ * 1.618/2 => dur decayTime;
 decayTime => NGC3925.globDecayTime;
 
-288. => float decayAmt; // percentage of duration of current step
+472. => float decayAmt; // percentage of duration of current step
 
 <<< "decayTime:", decayTime / _16th_ >>>;
 
@@ -271,7 +271,7 @@ _16th_ + g.swingValues[1] => echoB[1].delay;
 1576. => reverb.cutoff;
 0.0   => reverb.wet;
 0.618 => reverb.feedback;
-0.231 => NGC3925.amp;
+0.030 => NGC3925.amp;
 
 fun void cueCut(int sliceChoice, int swingIndex) {
     g.swingValues[swingIndex] => dur duration;
@@ -441,19 +441,25 @@ fun void handleMidi()
         // get the next incoming message
         while( midiInput.recv(midiMsg) )
         {
-            // if button1B is on, play sixteenth-notes
+            
             if ((midiMsg => midi.isController) && (midi.getControllerNum(midiMsg) == lc.knobC8))  {
                 midi.getControlValue(midiMsg) * effectiveControlStepWidth => sliceOffset;
                   <<< "sliceOffset:", sliceOffset >>>;
-           }
+            }
+
+            if ((midiMsg => midi.isController) && (midi.getControllerNum(midiMsg) == lc.fader8))  {
+                midi.getControlValue(midiMsg)$float * (0.1/127.0) => NGC3925.amp;
+
+                <<< "sliceOffset:", sliceOffset >>>;
+            }
            
-           if ((midiMsg => midi.isNoteOn) && (midi.getNotenum(midiMsg) == lc.buttonB1)) {
-               0 => instActive;
-           }
+            if ((midiMsg => midi.isNoteOn) && (midi.getNotenum(midiMsg) == lc.buttonB2)) {
+                0 => instActive;
+            }
            
-           if ((midiMsg => midi.isNoteOff) && (midi.getNotenum(midiMsg) == lc.buttonB1)) {
-               1 => instActive;
-           }
+            if ((midiMsg => midi.isNoteOff) && (midi.getNotenum(midiMsg) == lc.buttonB2)) {
+                1 => instActive;
+            }
        }
    }
 }

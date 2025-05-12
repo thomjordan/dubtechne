@@ -21,8 +21,8 @@ blackhole = 'Existential Audio Inc.: BlackHole 2ch'
 '''---- M A N U A L L Y  S E T  O P T I O N S ----'''
 
 adc = None 
-dac = volt
-sample_rate = 48000 
+dac = blackhole
+sample_rate = 44100 
 
 '''--- E N D  of  O P T I O N  S E T T I N G S ---'''
 
@@ -83,9 +83,9 @@ class ShredsList(UserList):
         self.__dict__.update(attrs)
 
 # open a redis client for akj's server
-# redis = redis.Redis(host='76.18.119.54', port=6379, decode_responses=True, password='CloseToTheEdge')
+redis = redis.Redis(host='76.18.119.54', port=6379, decode_responses=True, password='CloseToTheEdge')
 # open local redis client
-redis = redis.Redis(host='127.0.0.1', port=6379, decode_responses=True)
+# redis = redis.Redis(host='127.0.0.1', port=6379, decode_responses=True)
 
 def extract_shred_id_and_filename_for_launched_shred(line):
     sporked_shred_pattern = re.compile(r"\(VM\) sporking incoming shred: (\d+) \((.+)\.ck\)")
@@ -139,7 +139,7 @@ def check_for_ChucK_start_time_and_update_Redis(line):
     maybe_time = check_for_ChucK_start_time(line)
     if maybe_time:
         ts = datetime.now(timezone.utc).timestamp()
-        offset = int(maybe_time)/48000.0
+        offset = int(maybe_time)/sample_rate
         redis.set("start_timestamp", f'{ts - offset}')
         print_to_jupyter(f'Samples since ChucK start: {maybe_time}; timestamp: {ts}') 
         print_to_jupyter(f'{offset} seconds offset; adjusted timestamp: {ts - offset}')
@@ -347,7 +347,7 @@ def close():
 display(Markdown("✅  **ChucK subprocess started**  ✅"))
 
 # pause for a bit before querying the ChucK shell for its value of 'now' (how many samples since the VM started)
-time.sleep(1)
+time.sleep(8)
 
 # query ChucK shell for stats, use its reported value of 'now' to calculate the VM start time and send it to Redis
 print_ChucK_stats()  

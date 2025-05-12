@@ -4,6 +4,9 @@
 // sync_period = 60.0 * numbeats_in_sync_period / bpm
 // seconds_to_wait_before_next_sync_boundary = sync_period - ((local_system_time - chuck_start_time_in_redis) % sync_period)
 
+@import "../base/midi"
+@import "../base/launchControl" // as 'lc'
+
 96. => float bpm;
 15000::ms / bpm => dur sixteenth; // 16th-note pulse @ 96 bpm
 sixteenth * 4 => dur beat;
@@ -26,8 +29,11 @@ fun dur th(float durtype) {
     return result;
 }
 
-[1., 1.066666666666667, 1.2, 1.333333333333333, 1.6, 1.8, 2.] @=> float scl1[];
-[1., 1.053497942386831, 1.185185185185185, 1.333333333333333, 1.580246913580247, 1.8, 2.] @=> float scl2[];
+[1.] @=> float scl1[];
+[1.] @=> float scl2[];
+
+//[1., 1.066666666666667, 1.2, 1.333333333333333, 1.5, 1.6, 1.8, 2.] @=> float scl1[];
+//[1., 1.053497942386831, 1.185185185185185, 1.333333333333333, 1.5, 1.580246913580247, 1.8, 2.] @=> float scl2[];
 [scl1, scl2] @=> auto scales[][];
 
 //54.=> float baseFreq;
@@ -58,11 +64,17 @@ fun foo() {
 }
 // spork ~ foo();
 
-3.1   => float maxAttack;  // the percentage of pulse that should be used for the maximum duration of attack
-132.0 => float maxRelease; // the percentage of pulse that should be used for the maximum duration of release
+//3.1   => float maxAttack;  // the percentage of pulse that should be used for the maximum duration of attack
+//132.0 => float maxRelease; // the percentage of pulse that should be used for the maximum duration of release
 
-38.2 => float attackVariance;  // the percentage of "maxAttack" above that individual notes may shorten by
-30.0 => float releaseVariance; // the percentage of "maxRelease" above that individual notes may shorten by
+0.000 => float maxAttack;  // the percentage of pulse that should be used for the maximum duration of attack
+120.0 => float maxRelease; // the percentage of pulse that should be used for the maximum duration of release
+
+//38.2 => float attackVariance;  // the percentage of "maxAttack" above that individual notes may shorten by
+//30.0 => float releaseVariance; // the percentage of "maxRelease" above that individual notes may shorten by
+
+0.001 => float attackVariance;  // the percentage of "maxAttack" above that individual notes may shorten by
+0.001 => float releaseVariance; // the percentage of "maxRelease" above that individual notes may shorten by
 
 // octave, pulse: 0, 1.25 | 2, 4 |  3, 8  // all on same scale (1)
 
@@ -83,12 +95,27 @@ maxRelease*pulse/100. => dur maxReleaseTime;
 // The standard approach is then shifted back by attackTime, so the perceived-point-of-onset sounds completely in sync, ensuring the envelope has time to fully open before "the standard sync point"
 // TODO: add attack variation/articulation, so that the longest possible attackTime is used for the sync calculation, while the attack of some subsequent notes may be shorter...
 //  ...in which case the sounding of that particular note is delayed by { maxAttackTime - pnAttackTime } where 'pn' means 'particular-note'
-twoBars - ((now + maxAttackTime) % twoBars) => now;  
+//twoBars - ((now + maxAttackTime) % twoBars) => now;  
+
+(beat*8) - ((now + maxAttackTime) % (beat*8)) => now;  
 
 0 => int scale_step;
 
+1.5 => float sawCutoffMaxValue;
+0.75 => float sawCutoff;
+1 => int sawActive;
+
+spork ~ handleMidi();
+
 while( true )
 {
+    sawCutoff => saw.cutoff;
+
+    if( !sawActive ) {
+        pulse => now;
+        continue;
+    }
+
     // shorten the attack time by some random amount from 'nothing' up to the attackVariance (percentage-of-maxAttackTime)
     (1.- Math.randomf()*attackVariance /100.) * maxAttackTime  => dur currentNoteAttackTime;  
     (1.- Math.randomf()*releaseVariance/100.) * maxReleaseTime => dur currentNoteReleaseTime; // similarly, shorten the release time by another random amount
@@ -98,10 +125,10 @@ while( true )
     offsetDelayForCurrentNote => now; // advance time (i.e. "delay note") by the offset
     
     // choose a random pitch from the scale
-    scale[Math.random2(0, scale.size()-1)]*baseFreq*Math.pow(2,octave) => float noteFreq;
+    //scale[Math.random2(0, scale.size()-1)]*baseFreq*Math.pow(2,octave) => float noteFreq;
  
     // ...or step through the scale
-    //scale[scale_step % scale.size()] * baseFreq*Math.pow(2,octave) => float noteFreq;
+    scale[scale_step % scale.size()] * baseFreq*Math.pow(2,octave) => float noteFreq;
     noteFreq => saw.freq;
   
     // advance step
@@ -123,6 +150,49 @@ while( true )
     // advance time by the period given by "pulse" minus the two offsets
     pulse - gateHold - offsetDelayForCurrentNote => now;
 }
+
+fun void handleMidi() 
+{
+    // name of the local midi device to open (do: 'chuck --probe' on command-line for device-list)
+    "Launch Control XL" => string device; // LaunchControl
+    
+    MidiIn midiInput; // the midi input event listener
+    MidiMsg midiMsg;  // the message for retrieving data
+    
+    // open the device
+    if( !midiInput.open( device ) ) me.exit();
+    
+    // print out device that was opened
+    <<< "midi device:", midiInput.name(), ": midi_input #", midiInput.num() >>>;
+    
+    Shred shredsInPlay[0];
+    
+    // main run loop
+    while( true )
+    {
+        // wait on midiInput event 
+        midiInput => now;
+        
+        // get the next incoming message
+        while( midiInput.recv(midiMsg) )
+        {
+            // if button1B is on, play sixteenth-notes
+            if ((midiMsg => midi.isController) && (midi.getControllerNum(midiMsg) == lc.knobC1))  {
+                midi.getControlValue(midiMsg)$float * (sawCutoffMaxValue/254.0) => sawCutoff;
+                <<< "sawCutoff:", sawCutoff >>>;
+           }
+           
+           if ((midiMsg => midi.isNoteOn) && (midi.getNotenum(midiMsg) == lc.buttonB1)) {
+               0 => sawActive;
+           }
+           
+           if ((midiMsg => midi.isNoteOff) && (midi.getNotenum(midiMsg) == lc.buttonB1)) {
+               1 => sawActive;
+           }
+       }
+   }
+}
+
 
 /*
 saw.eval(`
