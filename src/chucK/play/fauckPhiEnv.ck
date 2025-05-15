@@ -6,12 +6,11 @@
 
 @import "../base/midi"
 @import "../base/launchControl" // as 'lc'
+@import "../base/Globals" // imports classes 'g' and 't'
 
 96. => float bpm;
 15000::ms / bpm => dur sixteenth; // 16th-note pulse @ 96 bpm
 sixteenth * 4 => dur beat;
-sixteenth * 2 => dur eighth;
-beat * 8 => dur twoBars;
 
 //Faust sawEnvFilt => blackhole;
 //Faust envln => blackhole;
@@ -36,11 +35,11 @@ fun dur th(float durtype) {
 //[1., 1.053497942386831, 1.185185185185185, 1.333333333333333, 1.5, 1.580246913580247, 1.8, 2.] @=> float scl2[];
 [scl1, scl2] @=> auto scales[][];
 
-//54.=> float baseFreq;
-68.05 => float baseFreq;
+45.=> float baseFreq;
+//68.05 => float baseFreq;
  1 => int scaleChoice;
  2 => int octave;
- 8 => th => dur pulse;
+ 8 => t.th => dur pulse;
 
 // when multiple shreds of this file are playing simultaneously, this is a way to differentiate them
 //   by supplying it from Python when launching the file_shred
@@ -51,7 +50,7 @@ for( int i; i < me.args(); i++ ) {
     me.arg(i) => string arg;
     if(i==0) Std.atoi(arg) => shred_voice_num;
     if(i==1) Std.atoi(arg) => octave;
-    if(i==2) Std.atof(arg) => th => pulse;
+    if(i==2) Std.atof(arg) => t.th => pulse;
     if(i==3) Std.atoi(arg) => scaleChoice;
     //<<< "command-line arg", i, ":", me.arg( i ) >>>;
 }
@@ -95,9 +94,9 @@ maxRelease*pulse/100. => dur maxReleaseTime;
 // The standard approach is then shifted back by attackTime, so the perceived-point-of-onset sounds completely in sync, ensuring the envelope has time to fully open before "the standard sync point"
 // TODO: add attack variation/articulation, so that the longest possible attackTime is used for the sync calculation, while the attack of some subsequent notes may be shorter...
 //  ...in which case the sounding of that particular note is delayed by { maxAttackTime - pnAttackTime } where 'pn' means 'particular-note'
-//twoBars - ((now + maxAttackTime) % twoBars) => now;  
-
-(beat*8) - ((now + maxAttackTime) % (beat*8)) => now;  
+ 
+//(beat*8) - ((now + maxAttackTime) % (beat*8)) => now; 
+t.timeUntilNextSync() => now;
 
 0 => int scale_step;
 
@@ -148,7 +147,8 @@ while( true )
     //sawEnvFilt.v("gate", 0);
     
     // advance time by the period given by "pulse" minus the two offsets
-    pulse - gateHold - offsetDelayForCurrentNote => now;
+    //pulse - gateHold - offsetDelayForCurrentNote => now;
+    pulse - gateHold => now;
 }
 
 fun void handleMidi() 

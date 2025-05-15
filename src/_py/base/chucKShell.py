@@ -6,10 +6,10 @@ import os
 import re
 import time
 import redis
-from datetime import datetime, timezone
 from collections import UserList
 from IPython.display import display, Markdown
 
+chucK_base_dir = '/Users/artspace/Development/dubtechne/dubtechne/src/chucK/base/'
 chucK_play_dir = '/Users/artspace/Development/dubtechne/dubtechne/src/chucK/play/'
 
 '''--- Settings for launching ChucK VM as a subprocess ---'''
@@ -23,6 +23,7 @@ blackhole = 'Existential Audio Inc.: BlackHole 2ch'
 adc = None 
 dac = blackhole
 sample_rate = 44100 
+bufsize = 256
 
 '''--- E N D  of  O P T I O N  S E T T I N G S ---'''
 
@@ -30,8 +31,9 @@ sample_rate = 44100
 adc_arg = f'--adc:{adc}' if adc else ''
 dac_arg = f'--dac:{dac}' 
 srate_arg = f'--srate:{sample_rate}'
-args_for_launching_ChucK_with_adc = ['chuck', dac_arg, srate_arg, '--shell', adc_arg]
-args_for_launching_ChucK_adc_none = ['chuck', dac_arg, srate_arg, '--shell']
+bufsize_arg = f'--bufsize:{bufsize}'
+args_for_launching_ChucK_with_adc = ['chuck', dac_arg, srate_arg, bufsize_arg, '--shell', adc_arg]
+args_for_launching_ChucK_adc_none = ['chuck', dac_arg, srate_arg, bufsize_arg, '--shell']
 args_for_launching_ChucK = args_for_launching_ChucK_with_adc if adc else args_for_launching_ChucK_adc_none
 
 # allocate a pseudo-terminal to trick ChucK into line-buffering
@@ -138,11 +140,23 @@ def check_for_ChucK_start_time(line):
 def check_for_ChucK_start_time_and_update_Redis(line):
     maybe_time = check_for_ChucK_start_time(line)
     if maybe_time:
-        ts = datetime.now(timezone.utc).timestamp()
+        ts = time.time() 
         offset = int(maybe_time)/sample_rate
-        redis.set("start_timestamp", f'{ts - offset}')
+        # redis.set("start_timestamp", f'{ts - offset}')
         print_to_jupyter(f'Samples since ChucK start: {maybe_time}; timestamp: {ts}') 
         print_to_jupyter(f'{offset} seconds offset; adjusted timestamp: {ts - offset}')
+
+# assumes that importBase("Globals") has already been called (the file in which class 't' is defined)
+def check_for_ChucK_start_time_and_update_Globals(line):
+    samples_since_vm_start = check_for_ChucK_start_time(line)
+    ts = time.time() 
+    if samples_since_vm_start:
+        numsamples_since_1970 = ts * sample_rate
+        vm_start_time_in_samples = numsamples_since_1970 - float(samples_since_vm_start)
+        update_startTime_command = '{' + f'{vm_start_time_in_samples} => t.startTime;' + '}'
+        send_command(update_startTime_command)
+        print_to_jupyter(f'Samples since ChucK start: {samples_since_vm_start}') 
+        print_to_jupyter(f' VM start time in samples: {vm_start_time_in_samples}')
 
 def read_chuck_output():
     """Background thread function to parse the output of the running ChucK shell subprocess and print it in the Jupyter interactive window.
@@ -163,7 +177,8 @@ def read_chuck_output():
             # ...this calculates the time that the VM has started, and updates the value in our shared Redis
             # ...so that Aaron can easily sync to my ChucK process via him computing the current value of "now"
             # ...which is based on the start time of the ChucK VM
-            check_for_ChucK_start_time_and_update_Redis(line)
+            #check_for_ChucK_start_time_and_update_Redis(line)
+            check_for_ChucK_start_time_and_update_Globals(line)
             print_to_jupyter(cleaned_line)
 
 # Start the reader thread
@@ -343,11 +358,29 @@ def close():
     chuck_process.terminate()
     chuck_process.wait()
 
+def importBase(filename):
+    filepath_string = f'"{chucK_base_dir}{filename}.ck"'
+    command = '{ ' + '@import ' + filepath_string + ' }'
+    send_command(command)
+    display(command)
+
+# sets global tempo of ChucK, with optional launchQuantization window_size (in num_beats)
+def setTempo(bpm, launchQ=None):
+    if launchQ:
+        command = '{ t.setTempo(' + str(bpm) + ', ' + str(launchQ) + '); }'
+    else:
+        command = '{ t.setTempo(' + str(bpm) + '); }'
+    send_command(command)
+
 # display confirmation message that the ChucK subprocess started successfully
 display(Markdown("✅  **ChucK subprocess started**  ✅"))
 
 # pause for a bit before querying the ChucK shell for its value of 'now' (how many samples since the VM started)
-time.sleep(8)
+time.sleep(5)
+
+importBase('Globals')
+
+time.sleep(5)
 
 # query ChucK shell for stats, use its reported value of 'now' to calculate the VM start time and send it to Redis
 print_ChucK_stats()  

@@ -5,7 +5,7 @@ fauckPhiEnv(oct=0, pulse=8)
 slicing()
 
 # %%
-xss(20)
+xss(6)
 
 #%%
 xs('fauckPhiEnv')
@@ -13,8 +13,29 @@ xs('fauckPhiEnv')
 #%%
 xs('slicing')
 
-# %%
+#%%
+setTempo(103, launchQ=4)
+#%%
+sc("{ <<< t.tempo >>>; }")
+#%%
+sc("{ <<< t.syncPeriod >>>; }")
+#%%
+sc("{ <<< t.startTime >>>; }")
+#%%
+sc("{ t.setTempo(90.0); }")
+#%%
+sc("{ t.setTempo(120.0); }")
+#%%
+sc("{ t.setLaunchQ(2); }")
+#%%
+sc("{ t.setLaunchQ(4); }")
+#%%
 print(shared_vars["slicing"])
+# %%
+from datetime import datetime, timezone
+ts = datetime.now(timezone.utc).timestamp()
+epicSamples = ts * 48000
+print(epicSamples)
 
 # %%
 sc("{ <<< me.sourceDir() >>>; }")
@@ -29,6 +50,17 @@ print('start_timestamp:', redis.get("start_timestamp"))
 
 # %%
 sc("^")
+
+#%%
+import time
+from datetime import datetime, timezone
+
+ts1 = time.time()
+ts2 = datetime.now(timezone.utc).timestamp()
+
+print(ts1)
+print(ts2)
+print((ts2 - ts1) * 10) 
 
 # %%
 xs('fauckPhiEnv')

@@ -1,6 +1,6 @@
 // "/Users/artspace/Development/dubtechne/dubtechne/src/chucK/base/" => string import_path;
 
-@import "../base/globals"       // as 'g'
+@import "../base/globals"       // imports classes 'g' and 't'
 @import "../base/tuning"        // as 'tun'
 @import "../base/launchControl" // as 'lc'
 @import "../base/midi"
@@ -226,8 +226,10 @@ totalNumberOf16thNotesInClipPlaybackArea / resolution => int totalNumberOfSlices
 
 0 => int sliceOffset; // this is changed by the midi controller lc.knobC8 ( [0..127] * 8
 
-96.0 => float playBPM;
-15.0::second / playBPM => dur _16th_;
+//96.0 => float playBPM;
+//15.0::second / playBPM => dur _16th_;
+
+16 => t.th => dur _16th_;
 
 g.makeSwing(50.0, _16th_);
 
@@ -403,9 +405,9 @@ for( int r: result ) <<< r >>>;
 it6Pattern16 @=> int p1[]; // sequence of slice #'s (96 steps)
 joyousLakes  @=> int m1[]; // stepwise mute pattern (96 steps)
 
-625.0::ms / 4.0 => dur T;
-(T*8.0) - (now % (T*8.0)) => now;
-
+//625.0::ms / 4.0 => dur T;
+//(T*8.0) - (now % (T*8.0)) => now;
+t.timeUntilNextSync() => now; 
 
 
 while(true) {
