@@ -8,7 +8,7 @@
 @import "../base/launchControl" // as 'lc'
 @import "../base/Globals" // imports classes 'g' and 't'
 
-96. => float bpm;
+103. => float bpm;
 15000::ms / bpm => dur sixteenth; // 16th-note pulse @ 96 bpm
 sixteenth * 4 => dur beat;
 
@@ -28,18 +28,18 @@ fun dur th(float durtype) {
     return result;
 }
 
-[1.] @=> float scl1[];
+[2.,1.,1.,1.,1.,1.,1.,1.] @=> float scl1[];
 [1.] @=> float scl2[];
 
 //[1., 1.066666666666667, 1.2, 1.333333333333333, 1.5, 1.6, 1.8, 2.] @=> float scl1[];
 //[1., 1.053497942386831, 1.185185185185185, 1.333333333333333, 1.5, 1.580246913580247, 1.8, 2.] @=> float scl2[];
-[scl1, scl2] @=> auto scales[][];
+[scl1, scl1] @=> auto scales[][];
 
 45.=> float baseFreq;
 //68.05 => float baseFreq;
  1 => int scaleChoice;
- 2 => int octave;
- 8 => t.th => dur pulse;
+ 0 => int octave;
+ 8 => th => dur pulse;
 
 // when multiple shreds of this file are playing simultaneously, this is a way to differentiate them
 //   by supplying it from Python when launching the file_shred
@@ -95,8 +95,8 @@ maxRelease*pulse/100. => dur maxReleaseTime;
 // TODO: add attack variation/articulation, so that the longest possible attackTime is used for the sync calculation, while the attack of some subsequent notes may be shorter...
 //  ...in which case the sounding of that particular note is delayed by { maxAttackTime - pnAttackTime } where 'pn' means 'particular-note'
  
-//(beat*8) - ((now + maxAttackTime) % (beat*8)) => now; 
-t.timeUntilNextSync() => now;
+//(beat*8) - ((now) % (beat*8)) => now; 
+//t.timeUntilNextSync() => now;
 
 0 => int scale_step;
 
@@ -192,6 +192,8 @@ fun void handleMidi()
        }
    }
 }
+
+
 
 
 /*

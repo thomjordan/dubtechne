@@ -36,9 +36,9 @@ public class g extends Object
 
 public class t extends Object
 {
-    120.0 => static float tempo;              // set default tempo
+    103.0 => static float tempo;              // set default tempo
     0.500::second => static dur beatDuration; // set beat duration to default tempo
-    4 => static int launchQ; // the launch_quantize window size in beats
+    8 => static int launchQ; // the launch_quantize window size in beats
     launchQ => beatsToDur => static dur syncPeriod; // the launch_quantize window size in ms
 
     // VM start time in number_of_samples_since_1/1/1970

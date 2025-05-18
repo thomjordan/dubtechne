@@ -1,5 +1,19 @@
 # %% [interactive]
+%run chucKShell.py
+
+# %% 
 fauckPhiEnv(oct=0, pulse=8)
+
+# %%
+func_to_launch = (lambda: fauckPhiEnv(oct=0, pulse=8)) 
+delay = 5
+
+#target_time = time.time() + delay 
+target_time = 1747596980
+
+print("Waiting until:", target_time)
+wait_until(target_time, func_to_launch)
+
 
 # %%
 slicing()
@@ -14,7 +28,7 @@ xs('fauckPhiEnv')
 xs('slicing')
 
 #%%
-setTempo(103, launchQ=4)
+setTempo(103, launchQ=8)
 #%%
 sc("{ <<< t.tempo >>>; }")
 #%%

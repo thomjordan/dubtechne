@@ -5,7 +5,7 @@ import pty
 import os
 import re
 import time
-import redis
+# import redis
 from collections import UserList
 from IPython.display import display, Markdown
 
@@ -17,6 +17,8 @@ chucK_play_dir = '/Users/artspace/Development/dubtechne/dubtechne/src/chucK/play
 #  preferred audio interfaces 
 volt      = 'Universal Audio: Volt 476P'
 blackhole = 'Existential Audio Inc.: BlackHole 2ch'
+
+# chuck --srate:44100 bufsize:128 dac:'Existential Audio Inc.: BlackHole 2ch' fauckPhiEnv.ck
 
 '''---- M A N U A L L Y  S E T  O P T I O N S ----'''
 
@@ -85,7 +87,7 @@ class ShredsList(UserList):
         self.__dict__.update(attrs)
 
 # open a redis client for akj's server
-redis = redis.Redis(host='76.18.119.54', port=6379, decode_responses=True, password='CloseToTheEdge')
+# redis = redis.Redis(host='76.18.119.54', port=6379, decode_responses=True, password='CloseToTheEdge')
 # open local redis client
 # redis = redis.Redis(host='127.0.0.1', port=6379, decode_responses=True)
 
@@ -429,3 +431,20 @@ for s in statements_to_execute: exec(s)
 
 # Success!!
 print_to_jupyter("Yipee!!")
+
+def my_function():
+    print("Function triggered at:", time.time())
+
+def wait_until(target_time, myfunction, precision=0.005):
+    while True:
+        now = time.time()
+        remaining = target_time - now
+        if remaining <= precision:
+            break
+        time.sleep(remaining / 2)
+
+    # Spin-lock until we hit or pass the target
+    while time.time() < target_time:
+        pass
+
+    myfunction()
