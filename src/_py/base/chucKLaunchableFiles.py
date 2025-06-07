@@ -12,5 +12,5 @@ If a function's signature isn't empty, the first arg must be '*' to specify that
   args are kwargs which can be provided in any order in the function call.
 '''
 
-def fauckPhiEnv(*, oct=0, pulse=8, scale=1): ()
+def fauckPhiEnv(*, oct=0, pulse=8, scale=1, vol=50): ()
 def slicing(): () 

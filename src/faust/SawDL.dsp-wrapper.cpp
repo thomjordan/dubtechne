@@ -129,7 +129,7 @@ class dsp
  * ChucK glue code
  */
 static t_CKUINT SawDL_offset_data = 0;
-static int g_sr = 44100;
+static int g_sr = 48000;
 static int g_nChans = 1;
 
 CK_DLL_CTOR(SawDL_ctor)
@@ -262,7 +262,6 @@ CK_DLL_MFUN(SawDL_cget_fEntry4)
 CK_DLL_QUERY(SawDL_query)
 {
     //g_sr = QUERY->srate;
-    //g_sr = QUERY->srate(); // changed by TJ on 4/2/25, to address error that appears when trying to use the faust2ck utility
 
 	SawDL temp; // needed to get IO channel count
 

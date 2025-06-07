@@ -9,6 +9,8 @@ import time
 from collections import UserList
 from IPython.display import display, Markdown
 
+
+""" # macOS  
 chucK_base_dir = '/Users/artspace/Development/dubtechne/dubtechne/src/chucK/base/'
 chucK_play_dir = '/Users/artspace/Development/dubtechne/dubtechne/src/chucK/play/'
 
@@ -37,6 +39,13 @@ bufsize_arg = f'--bufsize:{bufsize}'
 args_for_launching_ChucK_with_adc = ['chuck', dac_arg, srate_arg, bufsize_arg, '--shell', adc_arg]
 args_for_launching_ChucK_adc_none = ['chuck', dac_arg, srate_arg, bufsize_arg, '--shell']
 args_for_launching_ChucK = args_for_launching_ChucK_with_adc if adc else args_for_launching_ChucK_adc_none
+"""
+
+# Linux
+chucK_base_dir = '/home/subhan/dev/dubtechne/src/chucK/base/'
+chucK_play_dir = '/home/subhan/dev/dubtechne/src/chucK/play/'
+sample_rate = 48000 
+args_for_launching_ChucK = "pw-jack chuck --driver:JACK --srate:48000 --bufsize:128 --shell".split() 
 
 # allocate a pseudo-terminal to trick ChucK into line-buffering
 master_fd, slave_fd = pty.openpty()

@@ -1,7 +1,7 @@
 /* ------------------------------------------------------------
 author: "Aaron Krister Johnson"
 name: "AKJRev"
-Code generated with Faust 2.80.0 (https://faust.grame.fr)
+Code generated with Faust 2.81.0 (https://faust.grame.fr)
 Compilation options: -a .faust2ck_tmp/AKJRev.dsp-wrapper.cpp -lang cpp -ct 1 -es 1 -mcd 16 -mdd 1024 -mdy 33 -single -ftz 0
 ------------------------------------------------------------ */
 
@@ -1061,7 +1061,7 @@ class mydsp : public dsp {
  * ChucK glue code
  */
 static t_CKUINT AKJRev_offset_data = 0;
-static int g_sr = 44100;
+static int g_sr = 48000;
 static int g_nChans = 1;
 
 CK_DLL_CTOR(AKJRev_ctor)
@@ -1166,7 +1166,6 @@ CK_DLL_MFUN(AKJRev_cget_fEntry0)
 CK_DLL_QUERY(AKJRev_query)
 {
     //g_sr = QUERY->srate;
-    //g_sr = QUERY->srate(); // changed by TJ on 4/2/25, to address error that appears when trying to use the faust2ck utility
 
 	AKJRev temp; // needed to get IO channel count
 

@@ -1,6 +1,3 @@
-// 13, 29, 49, 77
-
-
 public class lc extends Object 
 {   // knobs (control numbers)
     13 => static int knobA1;

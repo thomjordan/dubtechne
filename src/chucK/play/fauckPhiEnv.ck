@@ -1,22 +1,19 @@
-// bpm = 96.0
-// numbeats_in_sync_period = 8
-
-// sync_period = 60.0 * numbeats_in_sync_period / bpm
-// seconds_to_wait_before_next_sync_boundary = sync_period - ((local_system_time - chuck_start_time_in_redis) % sync_period)
-
-@import "../base/midi"
-@import "../base/launchControl" // as 'lc'
-@import "../base/Globals" // imports classes 'g' and 't'
-
-103. => float bpm;
-15000::ms / bpm => dur sixteenth; // 16th-note pulse @ 96 bpm
-sixteenth * 4 => dur beat;
+@import "/home/subhan/dev/dubtechne/src/chucK/base/Midi.ck"
+@import "/home/subhan/dev/dubtechne/src/chucK/base/LaunchControl.ck" // as 'lc'
+@import "/home/subhan/dev/dubtechne/src/chucK/base/Globals.ck" // imports classes 'g' and 't'
 
 //Faust sawEnvFilt => blackhole;
 //Faust envln => blackhole;
      
 EnvGen envlnGen => SawDL saw => AKJRev rev => dac; // SawDL needs to be recompiled with a "filterModAmt" parameter
-    
+
+t.setTempo(103, 8);
+
+/*
+103. => float bpm;
+15000::ms / bpm => dur sixteenth; // 16th-note pulse @ 96 bpm
+sixteenth * 4 => dur beat;
+
 fun dur th(int durtype) {
     beat * 4 => dur wholeNote;
     wholeNote / (durtype$float) => dur result;
@@ -27,6 +24,7 @@ fun dur th(float durtype) {
     wholeNote / durtype => dur result;
     return result;
 }
+*/
 
 [2.,1.,1.,1.,1.,1.,1.,1.] @=> float scl1[];
 [1.] @=> float scl2[];
@@ -39,8 +37,9 @@ fun dur th(float durtype) {
 //68.05 => float baseFreq;
  1 => int scaleChoice;
  0 => int octave;
- 8 => th => dur pulse;
-
+ 50 => int volume;
+ 8 => t.th => dur pulse;
+    
 // when multiple shreds of this file are playing simultaneously, this is a way to differentiate them
 //   by supplying it from Python when launching the file_shred
  1 => int shred_voice_num; 
@@ -52,6 +51,7 @@ for( int i; i < me.args(); i++ ) {
     if(i==1) Std.atoi(arg) => octave;
     if(i==2) Std.atof(arg) => t.th => pulse;
     if(i==3) Std.atoi(arg) => scaleChoice;
+    if(i==4) Std.atoi(arg) => volume;
     //<<< "command-line arg", i, ":", me.arg( i ) >>>;
 }
 
@@ -79,13 +79,14 @@ fun foo() {
 
 scales[(scaleChoice-1) % scales.size()] @=> float scale[];
 
-3::samp => dur gateHold;
+1::samp => dur gateHold;
 
 0.618 => saw.glide;
 0.5   => rev.feedback;
 2000  => rev.cutoff;
 0.382 => rev.wet;
-0.003 => saw.gain;
+// 0.005 => saw.gain;
+0.005 * volume/100. => saw.gain;
 
 maxAttack*pulse/100.  => dur maxAttackTime;
 maxRelease*pulse/100. => dur maxReleaseTime;
@@ -96,7 +97,8 @@ maxRelease*pulse/100. => dur maxReleaseTime;
 //  ...in which case the sounding of that particular note is delayed by { maxAttackTime - pnAttackTime } where 'pn' means 'particular-note'
  
 //(beat*8) - ((now) % (beat*8)) => now; 
-//t.timeUntilNextSync() => now;
+
+t.timeUntilNextSync() => now;
 
 0 => int scale_step;
 
@@ -120,8 +122,8 @@ while( true )
     (1.- Math.randomf()*releaseVariance/100.) * maxReleaseTime => dur currentNoteReleaseTime; // similarly, shorten the release time by another random amount
     
     // the difference between maxAttackTime & currentNoteAttackTime provides the relative location for starting the current note with a potentially shorter attack-time
-    maxAttackTime - currentNoteAttackTime => dur offsetDelayForCurrentNote; 
-    offsetDelayForCurrentNote => now; // advance time (i.e. "delay note") by the offset
+    //maxAttackTime - currentNoteAttackTime => dur offsetDelayForCurrentNote; 
+    //offsetDelayForCurrentNote => now; // advance time (i.e. "delay note") by the offset
     
     // choose a random pitch from the scale
     //scale[Math.random2(0, scale.size()-1)]*baseFreq*Math.pow(2,octave) => float noteFreq;
@@ -179,7 +181,7 @@ fun void handleMidi()
             // if button1B is on, play sixteenth-notes
             if ((midiMsg => midi.isController) && (midi.getControllerNum(midiMsg) == lc.knobC1))  {
                 midi.getControlValue(midiMsg)$float * (sawCutoffMaxValue/254.0) => sawCutoff;
-                <<< "sawCutoff:", sawCutoff >>>;
+                //<<< "sawCutoff:", sawCutoff >>>;
            }
            
            if ((midiMsg => midi.isNoteOn) && (midi.getNotenum(midiMsg) == lc.buttonB1)) {

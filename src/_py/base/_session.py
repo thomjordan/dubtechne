@@ -2,7 +2,16 @@
 %run chucKShell.py
 
 # %% 
-fauckPhiEnv(oct=0, pulse=8)
+fauckPhiEnv(oct=0, pulse=8, vol=100)
+
+# %% 
+fauckPhiEnv(oct=3, pulse=16, vol=50)
+
+# %% 
+xs('fauckPhiEnv')
+
+# %%
+importBase("Globals")
 
 # %%
 func_to_launch = (lambda: fauckPhiEnv(oct=0, pulse=8)) 
@@ -22,7 +31,7 @@ slicing()
 xss(6)
 
 #%%
-xs('fauckPhiEnv')
+
 
 #%%
 xs('slicing')

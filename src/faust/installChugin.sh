@@ -1,10 +1,14 @@
-#!/bin/zsh
+#!/bin/bash
 
-# Specify the destination directory
-DEST_DIR="/Library/Application Support/ChucK/chugins"
+# Specify the destination directory based on the OS-type
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    DEST_DIR="/usr/local/lib/chuck/"
+else
+    DEST_DIR="/Library/Application Support/ChucK/chugins"
+fi
 
 # Ensure the destination directory exists
-mkdir -p "$DEST_DIR"
+sudo mkdir -p "$DEST_DIR"
 
 # Check if a file argument is supplied
 if [[ $# -ne 1 ]]; then
@@ -22,4 +26,4 @@ if [[ ! -f "$FILE_TO_COPY" ]]; then
 fi
 
 # Copy the file to the destination directory
-cp "$FILE_TO_COPY" "$DEST_DIR" && echo "File copied to $DEST_DIR"
+sudo cp "$FILE_TO_COPY" "$DEST_DIR" && echo "File copied to $DEST_DIR"
