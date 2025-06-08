@@ -1,75 +1,151 @@
 #!/opt/homebrew/Cellar/python@3.11/3.11.5/bin/python3 -i
 import subprocess
 import threading
+import asyncio
+import errno
 import pty
 import os
 import re
+import sh
 import time
 # import redis
 from collections import UserList
 from IPython.display import display, Markdown
 
-
-""" # macOS  
-chucK_base_dir = '/Users/artspace/Development/dubtechne/dubtechne/src/chucK/base/'
-chucK_play_dir = '/Users/artspace/Development/dubtechne/dubtechne/src/chucK/play/'
-
-'''--- Settings for launching ChucK VM as a subprocess ---'''
-
-#  preferred audio interfaces 
-volt      = 'Universal Audio: Volt 476P'
-blackhole = 'Existential Audio Inc.: BlackHole 2ch'
-
-# chuck --srate:44100 bufsize:128 dac:'Existential Audio Inc.: BlackHole 2ch' fauckPhiEnv.ck
-
-'''---- M A N U A L L Y  S E T  O P T I O N S ----'''
-
-adc = None 
-dac = blackhole
-sample_rate = 44100 
-bufsize = 256
-
-'''--- E N D  of  O P T I O N  S E T T I N G S ---'''
-
-# construct command-line args for selected options
-adc_arg = f'--adc:{adc}' if adc else ''
-dac_arg = f'--dac:{dac}' 
-srate_arg = f'--srate:{sample_rate}'
-bufsize_arg = f'--bufsize:{bufsize}'
-args_for_launching_ChucK_with_adc = ['chuck', dac_arg, srate_arg, bufsize_arg, '--shell', adc_arg]
-args_for_launching_ChucK_adc_none = ['chuck', dac_arg, srate_arg, bufsize_arg, '--shell']
-args_for_launching_ChucK = args_for_launching_ChucK_with_adc if adc else args_for_launching_ChucK_adc_none
-"""
-
 # Linux
-chucK_base_dir = '/home/subhan/dev/dubtechne/src/chucK/base/'
-chucK_play_dir = '/home/subhan/dev/dubtechne/src/chucK/play/'
+chucK_base_dir = "/home/subhan/dev/dubtechne/src/chucK/base/"
+chucK_play_dir = "/home/subhan/dev/dubtechne/src/chucK/play/"
 sample_rate = 48000 
-args_for_launching_ChucK = "pw-jack chuck --driver:JACK --srate:48000 --bufsize:128 --shell".split() 
 
-# allocate a pseudo-terminal to trick ChucK into line-buffering
-master_fd, slave_fd = pty.openpty()
+# Regex to clean ANSI escape sequences
+ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
 
-# start ChucK subprocess using the slave end of the PTY
-chuck_process = subprocess.Popen(
-    args_for_launching_ChucK,
-    stdin=subprocess.PIPE,
-    stdout=slave_fd,
-    stderr=slave_fd,
-    text=True
+# Shell command for using stderr and piping stdout raw-audio to pw-cat
+chuck_shell_command = "stdbuf -o0 -eL /home/subhan/ext/chuck/src/host-examples/chuck-stdout | pw-cat -p -a --rate 48000 --channels 2 --format s32 -"
+
+chuck_shell_command2 = (
+    "stdbuf -o0 -eL /home/subhan/ext/chuck/src/host-examples/chuck-stdout 2> /tmp/chuck_err.log "
+    "| pw-cat -p -a --rate 48000 --channels 2 --format s32 -"
 )
 
-# file wrapper around the master end so we can read output
-chuck_output = os.fdopen(master_fd)
+
+fifo_writer = None  # Global so you can keep it open
+chuck_process = None
+
+"""
+async def launch_chuck_subprocess():
+    global chuck_process
+
+    # Launch chuck-stdout first - it should open FIFO for reading inside its code
+    chuck_process = await asyncio.create_subprocess_shell(
+        chuck_shell_command,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    asyncio.create_task(read_chuck_stderr(chuck_process))
+
+    # Now wait a moment to let chuck-stdout open the FIFO for reading
+    await asyncio.sleep(0.5)  # tweak as needed
+
+    # Now open FIFO for writing — should not block
+    global fifo_writer
+    fifo_fd = os.open("/tmp/chuck_cmd", os.O_WRONLY)
+    fifo_writer = os.fdopen(fifo_fd, "w")
+"""
+
+import os
+import asyncio
+
+async def launch_chuck_subprocess():
+    global chuck_process, pwcat_process, fifo_writer
+
+    r_fd, w_fd = os.pipe()
+
+    # Wrap fds in file objects to safely pass to subprocess
+    r_file = os.fdopen(r_fd, "rb", buffering=0)  # raw binary, unbuffered
+    w_file = os.fdopen(w_fd, "wb", buffering=0)
+
+    pwcat_process = await asyncio.create_subprocess_exec(
+        "pw-cat",
+        "-p", "-a",
+        "--rate", "48000",
+        "--channels", "2",
+        "--format", "s32",
+        "-",
+        stdin=r_file
+    )
+    # do not close r_fd or r_file here!
+
+    chuck_process = await asyncio.create_subprocess_exec(
+        "/home/subhan/ext/chuck/src/host-examples/chuck-stdout",
+        stdin=asyncio.subprocess.PIPE,
+        stdout=w_file,
+        stderr=asyncio.subprocess.PIPE
+    )
+    # do not close w_fd or w_file here!
+
+    asyncio.create_task(read_chuck_stderr(chuck_process))
+
+    await asyncio.sleep(0.5)
+
+    fifo_fd = os.open("/tmp/chuck_cmd", os.O_WRONLY)
+    fifo_writer = os.fdopen(fifo_fd, "w", buffering=1)  # line buffered for immediate flush
+
+
+
+async def read_chuck_stderr(process):
+    while True:
+        line = await process.stderr.readline()
+        if not line:
+            break
+        #line = line.decode("utf-8", errors="replace").strip()
+        line = line.decode('utf-8').rstrip()
+        print(f"[CHUCK STDERR] {line}")  # <-- DEBUG print
+        cleaned_line = ansi_escape.sub('', line)
+        if cleaned_line:
+            check_for_launched_shred_and_retain_id(cleaned_line)
+            check_for_removed_shred_and_remove_its_id_from_shredlist(cleaned_line)
+            check_for_ChucK_start_time_and_update_Globals(cleaned_line)
+            print_to_jupyter(cleaned_line)
+
+'''
+async def read_chuck_stderr(process):
+    """Async function to parse ChucK stderr output line by line."""
+    while True:
+        line = await process.stderr.readline()
+        if not line:
+            break
+        line = line.decode('utf-8').strip()
+        cleaned_line = ansi_escape.sub('', line)
+        if cleaned_line:
+            check_for_launched_shred_and_retain_id(cleaned_line)
+            check_for_removed_shred_and_remove_its_id_from_shredlist(cleaned_line)
+            check_for_ChucK_start_time_and_update_Globals(cleaned_line)
+            print_to_jupyter(cleaned_line)
+'''
+
+async def shutdown_chuck():
+    global chuck_process, fifo_writer
+
+    if chuck_process:
+        chuck_process.terminate()
+        await chuck_process.wait()
+        chuck_process = None
+
+    if fifo_writer:
+        fifo_writer.close()
+        fifo_writer = None
+
+# function for printing to interactive window
+def print_to_jupyter(line):
+    """Print to Jupyter/VSCode interactive window."""
+    display(Markdown(f"`{line}`"))
+
 
 # namespace for sharing data between threads
 vars = {}
-
-# function for printing to interactive window
-
-def print_to_jupyter(something):
-    """Prints to the VSCode Interactive Window"""
-    display(Markdown(f"{something}"))
 
 
 class ShredsList(UserList):
@@ -169,38 +245,32 @@ def check_for_ChucK_start_time_and_update_Globals(line):
         print_to_jupyter(f'Samples since ChucK start: {samples_since_vm_start}') 
         print_to_jupyter(f' VM start time in samples: {vm_start_time_in_samples}')
 
-def read_chuck_output():
-    """Background thread function to parse the output of the running ChucK shell subprocess and print it in the Jupyter interactive window.
-    
-    Calls to specific functions are used to parse the ChucK shell output by looking for matches in regex patterns. 
-    Whenever one of these functions finds a match, it extracts any salient data for use within the function to complete its task.
-    """
-    # regex to strip out extraneous Markdown codes so they don't print as literals in the Jupyter console
-    ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
-    for line in iter(chuck_output.readline, ''):
-        cleaned_line = ansi_escape.sub('', line).strip()
-        if cleaned_line:
-            # if output shows that a new ChucK file was launched via a shell command, retain its shred_id
-            check_for_launched_shred_and_retain_id(line)
-            # if output shows that a shred_id has been removed, remove that id from its host filename's shredlist
-            check_for_removed_shred_and_remove_its_id_from_shredlist(line)
-            # when ChucK stats are queried (at the end of this file once the VM has started up)...
-            # ...this calculates the time that the VM has started, and updates the value in our shared Redis
-            # ...so that Aaron can easily sync to my ChucK process via him computing the current value of "now"
-            # ...which is based on the start time of the ChucK VM
-            #check_for_ChucK_start_time_and_update_Redis(line)
-            check_for_ChucK_start_time_and_update_Globals(line)
-            print_to_jupyter(cleaned_line)
-
-# Start the reader thread
-read_chuck_stdout_thread = threading.Thread(target=read_chuck_output, daemon=True)
-read_chuck_stdout_thread.start()
+test_command = "/home/subhan/dev/dubtechne/src/chucK/play/fauckPhiEnv.ck:1:4:8:1:100"
 
 # Function to send a command to the ChucK shell
-def send_command(command):
-    """Sends a command to the ChucK shell subprocess."""
-    chuck_process.stdin.write(command + '\n')
-    chuck_process.stdin.flush()  # Ensure command is sent immediately
+def send_command(command: str):
+    global fifo_writer
+    if fifo_writer is None:
+        print_to_jupyter("FIFO not open yet; cannot send command.")
+        return
+    try:
+        fifo_writer.write(command + "\n")
+        fifo_writer.flush()
+        print_to_jupyter(f"sent to FIFO: {command}")
+
+        '''
+        fifo_writer.write(f'+ {test_command}\n')
+        fifo_writer.flush()
+        print(f"[fifo] Wrote: + {test_command}")
+
+        fifo_writer.write('^ now\n')
+        fifo_writer.flush()
+        print("[fifo] Wrote: ^ now")
+        '''
+
+    except Exception as e:
+        print_to_jupyter(f"Error writing to FIFO: {e}")
+
 
 def print_ChucK_stats():
     """Prints ChucK stats such as the value of 'now' (number of samples since VM started)"""
@@ -269,7 +339,7 @@ class ChucKManagedFileShred:
         # create a formatted arg string from voice_num and unified_params
         argstr = make_ChucK_arglist(voice_num, unified_params) if unified_params else ()  
 
-        print_to_jupyter(f'\+ {chuck_filename}.ck{argstr}')
+        print_to_jupyter(f'+ {chuck_filename}.ck{argstr}')
 
         # spork the file with args
         spork(chuck_filename, argstr) 
@@ -371,7 +441,7 @@ def close():
 
 def importBase(filename):
     filepath_string = f'"{chucK_base_dir}{filename}.ck"'
-    command = '{ ' + '@import ' + filepath_string + ' }'
+    command = '{ ' +  f'@import {filepath_string}' + ' }'
     send_command(command)
     display(command)
 
@@ -386,19 +456,8 @@ def setTempo(bpm, launchQ=None):
 # display confirmation message that the ChucK subprocess started successfully
 display(Markdown("✅  **ChucK subprocess started**  ✅"))
 
-# pause for a bit before querying the ChucK shell for its value of 'now' (how many samples since the VM started)
-time.sleep(5)
-
-importBase('Globals')
-
-time.sleep(5)
-
-# query ChucK shell for stats, use its reported value of 'now' to calculate the VM start time and send it to Redis
-print_ChucK_stats()  
-
 # programmatically decorate all functions in 'chucKLaunchableFiles.py':
 from chucKLaunchableFiles import *
-import sh
 
 def get_list_of_launchable_file_func_names():
     """Returns a list of names of functions defined in chucKLaunchableFiles.py"""
@@ -438,8 +497,7 @@ def get_statements_to_decorate_launchable_file_funcs():
 statements_to_execute = get_statements_to_decorate_launchable_file_funcs() 
 for s in statements_to_execute: exec(s)
 
-# Success!!
-print_to_jupyter("Yipee!!")
+
 
 def my_function():
     print("Function triggered at:", time.time())
@@ -457,3 +515,8 @@ def wait_until(target_time, myfunction, precision=0.005):
         pass
 
     myfunction()
+
+
+async def main():
+    await launch_chuck_subprocess()
+

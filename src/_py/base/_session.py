@@ -1,5 +1,14 @@
 # %% [interactive]
-%run chucKShell.py
+from chucKShell import *
+await main()
+await asyncio.sleep(1)
+importBase("Globals")
+await asyncio.sleep(1)
+# query ChucK shell for stats, use its reported value of 'now' to calculate the VM start time and send it to Redis
+print_ChucK_stats()  
+# Success!!
+print_to_jupyter("Yipee!!")
+
 
 # %% 
 fauckPhiEnv(oct=0, pulse=8, vol=100)
