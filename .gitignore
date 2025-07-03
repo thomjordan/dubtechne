@@ -1,0 +1,15 @@
+# python 
+.venv/
+__pycache__/
+
+# chucK
+*.chug
+
+# haskell build-artifacts
+*.dyn_hi
+*.dyn_o
+*.hi
+*.o
+
+# needs to be moved (once we can get it to work correctly from another location)
+hyphen_minimal/

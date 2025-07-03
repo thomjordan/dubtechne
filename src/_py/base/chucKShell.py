@@ -1,4 +1,3 @@
-#!/opt/homebrew/Cellar/python@3.11/3.11.5/bin/python3 -i
 import subprocess
 import threading
 import asyncio
@@ -8,7 +7,6 @@ import os
 import re
 import sh
 import time
-# import redis
 from collections import UserList
 from IPython.display import display, Markdown
 
@@ -20,53 +18,35 @@ sample_rate = 48000
 # Regex to clean ANSI escape sequences
 ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
 
-# Shell command for using stderr and piping stdout raw-audio to pw-cat
-chuck_shell_command = "stdbuf -o0 -eL /home/subhan/ext/chuck/src/host-examples/chuck-stdout | pw-cat -p -a --rate 48000 --channels 2 --format s32 -"
-
-chuck_shell_command2 = (
-    "stdbuf -o0 -eL /home/subhan/ext/chuck/src/host-examples/chuck-stdout 2> /tmp/chuck_err.log "
-    "| pw-cat -p -a --rate 48000 --channels 2 --format s32 -"
-)
-
-
-fifo_writer = None  # Global so you can keep it open
+# Globals for your processes and fifo writer
 chuck_process = None
+pwcat_process = None
 
-"""
-async def launch_chuck_subprocess():
-    global chuck_process
-
-    # Launch chuck-stdout first - it should open FIFO for reading inside its code
-    chuck_process = await asyncio.create_subprocess_shell(
-        chuck_shell_command,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.PIPE,
-    )
-
-    asyncio.create_task(read_chuck_stderr(chuck_process))
-
-    # Now wait a moment to let chuck-stdout open the FIFO for reading
-    await asyncio.sleep(0.5)  # tweak as needed
-
-    # Now open FIFO for writing — should not block
-    global fifo_writer
-    fifo_fd = os.open("/tmp/chuck_cmd", os.O_WRONLY)
-    fifo_writer = os.fdopen(fifo_fd, "w")
-"""
-
-import os
-import asyncio
+async def read_chuck_stderr(process):
+    while True:
+        line = await process.stderr.readline()
+        if not line:
+            break
+        line = line.decode('utf-8', errors='replace').rstrip()
+        cleaned_line = ansi_escape.sub('', line)
+        if cleaned_line:
+            # Your processing functions here
+            check_for_launched_shred_and_retain_id(cleaned_line)
+            check_for_removed_shred_and_remove_its_id_from_shredlist(cleaned_line)
+            check_for_ChucK_start_time_and_update_Globals(cleaned_line)
+            print_to_jupyter(cleaned_line)
 
 async def launch_chuck_subprocess():
-    global chuck_process, pwcat_process, fifo_writer
+    global chuck_process, pwcat_process
 
+    # Create a pipe for audio from chuck -> pw-cat
     r_fd, w_fd = os.pipe()
 
-    # Wrap fds in file objects to safely pass to subprocess
-    r_file = os.fdopen(r_fd, "rb", buffering=0)  # raw binary, unbuffered
-    w_file = os.fdopen(w_fd, "wb", buffering=0)
+    # Wrap file descriptors with file objects (unbuffered binary mode)
+    r_file = os.fdopen(r_fd, 'rb', buffering=0)
+    w_file = os.fdopen(w_fd, 'wb', buffering=0)
 
+    # Launch pw-cat: read raw audio from r_file
     pwcat_process = await asyncio.create_subprocess_exec(
         "pw-cat",
         "-p", "-a",
@@ -76,67 +56,28 @@ async def launch_chuck_subprocess():
         "-",
         stdin=r_file
     )
-    # do not close r_fd or r_file here!
 
+    # Launch chuck-stdout: write raw audio to w_file, capture stderr
     chuck_process = await asyncio.create_subprocess_exec(
+        "stdbuf", "-o0", "-eL",
         "/home/subhan/ext/chuck/src/host-examples/chuck-stdout",
         stdin=asyncio.subprocess.PIPE,
         stdout=w_file,
         stderr=asyncio.subprocess.PIPE
     )
-    # do not close w_fd or w_file here!
 
+    # Close file objects in parent to avoid FD leaks (subprocess owns them)
+    r_file.close()
+    w_file.close()
+
+    # Start asynchronous reading of stderr logs
     asyncio.create_task(read_chuck_stderr(chuck_process))
 
+    # Wait briefly for chuck-stdout to open FIFO
     await asyncio.sleep(0.5)
 
-    fifo_fd = os.open("/tmp/chuck_cmd", os.O_WRONLY)
-    fifo_writer = os.fdopen(fifo_fd, "w", buffering=1)  # line buffered for immediate flush
+    print("ChucK and pw-cat subprocesses launched")
 
-
-
-async def read_chuck_stderr(process):
-    while True:
-        line = await process.stderr.readline()
-        if not line:
-            break
-        #line = line.decode("utf-8", errors="replace").strip()
-        line = line.decode('utf-8').rstrip()
-        print(f"[CHUCK STDERR] {line}")  # <-- DEBUG print
-        cleaned_line = ansi_escape.sub('', line)
-        if cleaned_line:
-            check_for_launched_shred_and_retain_id(cleaned_line)
-            check_for_removed_shred_and_remove_its_id_from_shredlist(cleaned_line)
-            check_for_ChucK_start_time_and_update_Globals(cleaned_line)
-            print_to_jupyter(cleaned_line)
-
-'''
-async def read_chuck_stderr(process):
-    """Async function to parse ChucK stderr output line by line."""
-    while True:
-        line = await process.stderr.readline()
-        if not line:
-            break
-        line = line.decode('utf-8').strip()
-        cleaned_line = ansi_escape.sub('', line)
-        if cleaned_line:
-            check_for_launched_shred_and_retain_id(cleaned_line)
-            check_for_removed_shred_and_remove_its_id_from_shredlist(cleaned_line)
-            check_for_ChucK_start_time_and_update_Globals(cleaned_line)
-            print_to_jupyter(cleaned_line)
-'''
-
-async def shutdown_chuck():
-    global chuck_process, fifo_writer
-
-    if chuck_process:
-        chuck_process.terminate()
-        await chuck_process.wait()
-        chuck_process = None
-
-    if fifo_writer:
-        fifo_writer.close()
-        fifo_writer = None
 
 # function for printing to interactive window
 def print_to_jupyter(line):
@@ -171,10 +112,6 @@ class ShredsList(UserList):
         super().__init__(data)
         self.__dict__.update(attrs)
 
-# open a redis client for akj's server
-# redis = redis.Redis(host='76.18.119.54', port=6379, decode_responses=True, password='CloseToTheEdge')
-# open local redis client
-# redis = redis.Redis(host='127.0.0.1', port=6379, decode_responses=True)
 
 def extract_shred_id_and_filename_for_launched_shred(line):
     sporked_shred_pattern = re.compile(r"\(VM\) sporking incoming shred: (\d+) \((.+)\.ck\)")
@@ -183,7 +120,7 @@ def extract_shred_id_and_filename_for_launched_shred(line):
     if match: 
         shred_id = int(match.group(1))
         filename = match.group(2)
-        # print_to_jupyter(f'shred_id {shred_id} returned for newly-launched file: {filename}.ck')
+        print_to_jupyter(f'shred_id {shred_id} returned for newly-launched file: {filename}.ck')
     return (shred_id, filename) if match else None
 
 def check_for_launched_shred_and_retain_id(line):
@@ -219,62 +156,82 @@ def check_for_removed_shred_and_remove_its_id_from_shredlist(line):
     vars[filename].remove(shred_id)
 
 def check_for_ChucK_start_time(line):
-    pattern = r"chuck time:\s*(\d+)::samp"
-    #line = "chuck time: 850688::samp"
+    pattern = r"^VM start time in microseconds:\s*(\d+)"
+    #line = "VM start time in microseconds: 1751485612216381"
     match = re.search(pattern, line)
-    return match.group(1) if match else None
-      
-def check_for_ChucK_start_time_and_update_Redis(line):
-    maybe_time = check_for_ChucK_start_time(line)
-    if maybe_time:
-        ts = time.time() 
-        offset = int(maybe_time)/sample_rate
-        # redis.set("start_timestamp", f'{ts - offset}')
-        print_to_jupyter(f'Samples since ChucK start: {maybe_time}; timestamp: {ts}') 
-        print_to_jupyter(f'{offset} seconds offset; adjusted timestamp: {ts - offset}')
+    if match:
+        print_to_jupyter(f"Matched!: {match.group(1)}")
+        return match.group(1)
+    else:
+        return None
 
 # assumes that importBase("Globals") has already been called (the file in which class 't' is defined)
 def check_for_ChucK_start_time_and_update_Globals(line):
-    samples_since_vm_start = check_for_ChucK_start_time(line)
-    ts = time.time() 
-    if samples_since_vm_start:
-        numsamples_since_1970 = ts * sample_rate
-        vm_start_time_in_samples = numsamples_since_1970 - float(samples_since_vm_start)
-        update_startTime_command = '{' + f'{vm_start_time_in_samples} => t.startTime;' + '}'
+    vm_start_in_microseconds = check_for_ChucK_start_time(line) 
+    if vm_start_in_microseconds:
+        vm_start_time_in_samples = float(vm_start_in_microseconds) / 1000000.0 * sample_rate
+        update_startTime_command = '{ ' + f'{vm_start_time_in_samples} => t.startTime;' + ' }'
         send_command(update_startTime_command)
-        print_to_jupyter(f'Samples since ChucK start: {samples_since_vm_start}') 
         print_to_jupyter(f' VM start time in samples: {vm_start_time_in_samples}')
 
 test_command = "/home/subhan/dev/dubtechne/src/chucK/play/fauckPhiEnv.ck:1:4:8:1:100"
 
-# Function to send a command to the ChucK shell
+async def send_command_async(command: str):
+    await asyncio.create_subprocess_shell(
+        f'echo "{command}" > /tmp/chuck_cmd'
+    )
+
 def send_command(command: str):
-    global fifo_writer
-    if fifo_writer is None:
-        print_to_jupyter("FIFO not open yet; cannot send command.")
-        return
+    """Run an async FIFO echo command from a synchronous context."""
     try:
-        fifo_writer.write(command + "\n")
-        fifo_writer.flush()
-        print_to_jupyter(f"sent to FIFO: {command}")
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
-        '''
-        fifo_writer.write(f'+ {test_command}\n')
-        fifo_writer.flush()
-        print(f"[fifo] Wrote: + {test_command}")
+    if loop.is_running():
+        asyncio.create_task(send_command_async(command))
+    else:
+        loop.run_until_complete(send_command_async(command))
 
-        fifo_writer.write('^ now\n')
-        fifo_writer.flush()
-        print("[fifo] Wrote: ^ now")
-        '''
+def run_async_anywhere(func, *args, **kwargs):
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
-    except Exception as e:
-        print_to_jupyter(f"Error writing to FIFO: {e}")
+    if loop.is_running():
+        asyncio.create_task(func(*args, **kwargs))
+    else:
+        loop.run_until_complete(func(*args, **kwargs))
 
+def import_chuck_file(fullpath: str):
+    send_command('{ @import \\"' + f'{fullpath}' + '\\" }')
 
 def print_ChucK_stats():
     """Prints ChucK stats such as the value of 'now' (number of samples since VM started)"""
     send_command("^")
+
+'''
+async def async_exit():
+    send_command("exit")
+    global chuck_process, pwcat_process
+    if chuck_process:
+        chuck_process.terminate()
+        await chuck_process.wait()
+        chuck_process = None
+    if pwcat_process:
+        pwcat_process.terminate()
+        await pwcat_process.wait()
+        pwcat_process = None
+
+#def exit():
+#    run_async_anywhere(async_exit)
+'''
+
+def exit_():
+    send_command("exit")
 
 # Example: Load a simple sine oscillator script in real-time
 # send_command("{ 1::second => dur T; SinOsc s => dac; while (true) { T => now; } }")
@@ -433,17 +390,18 @@ def xss(n):
     """Removes the first n shred_ids from the VM."""
     [ xs(id+1) for id in range(n) ]
 
-def close():
+def exit():
     """Cleans up and closes the ChucK shell when done."""
-    send_command("chuck --kill")  # Send a kill command if needed
+    send_command("exit")
     chuck_process.terminate()
     chuck_process.wait()
 
 def importBase(filename):
-    filepath_string = f'"{chucK_base_dir}{filename}.ck"'
-    command = '{ ' +  f'@import {filepath_string}' + ' }'
-    send_command(command)
-    display(command)
+    filepath_string = f'{chucK_base_dir}{filename}.ck'
+    import_chuck_file(filepath_string)
+    #command = '{ ' +  f'@import "{filepath_string}"' + ' }'
+    #send_command(command)
+    #display(command)
 
 # sets global tempo of ChucK, with optional launchQuantization window_size (in num_beats)
 def setTempo(bpm, launchQ=None):
@@ -496,25 +454,6 @@ def get_statements_to_decorate_launchable_file_funcs():
 
 statements_to_execute = get_statements_to_decorate_launchable_file_funcs() 
 for s in statements_to_execute: exec(s)
-
-
-
-def my_function():
-    print("Function triggered at:", time.time())
-
-def wait_until(target_time, myfunction, precision=0.005):
-    while True:
-        now = time.time()
-        remaining = target_time - now
-        if remaining <= precision:
-            break
-        time.sleep(remaining / 2)
-
-    # Spin-lock until we hit or pass the target
-    while time.time() < target_time:
-        pass
-
-    myfunction()
 
 
 async def main():

@@ -36,18 +36,18 @@ public class g extends Object
 
 public class t extends Object
 {
-    103.0 => static float tempo;              // set default tempo
-    0.500::second => static dur beatDuration; // set beat duration to default tempo
+    120.0 => static float tempo;              // set default tempo
+    (48000 * 60.0 / tempo)::samp => static dur beatDuration; // set beat duration to default tempo
     8 => static int launchQ; // the launch_quantize window size in beats
     launchQ => beatsToDur => static dur syncPeriod; // the launch_quantize window size in ms
 
     // VM start time in number_of_samples_since_1/1/1970
     // ...gets filled in by chucKShell.py
-    0.0 => static float startTime; 
+    static float startTime; 
 
     fun static void setTempo(float bpm) {
         bpm => tempo;
-        (60.0 / bpm)::second => beatDuration; // update for new tempo
+        (48000 * 60.0 / bpm)::samp => beatDuration; // update for new tempo
         launchQ => beatsToDur => syncPeriod;  //
     }
 
@@ -55,7 +55,7 @@ public class t extends Object
     fun static void setTempo(float bpm, int numbeats) {
         bpm => tempo;
         numbeats => launchQ;
-        (60.0 / bpm)::second => beatDuration; // update for new tempo
+        (48000 * 60.0 / bpm)::samp => beatDuration; // update for new tempo
         launchQ => beatsToDur => syncPeriod;  // update for new tempo & LQ window size
     }
 

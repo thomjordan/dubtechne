@@ -7,7 +7,7 @@
      
 EnvGen envlnGen => SawDL saw => AKJRev rev => dac; // SawDL needs to be recompiled with a "filterModAmt" parameter
 
-t.setTempo(103, 8);
+//t.setTempo(103, 8);
 
 /*
 103. => float bpm;
@@ -26,7 +26,7 @@ fun dur th(float durtype) {
 }
 */
 
-[2.,1.,1.,1.,1.,1.,1.,1.] @=> float scl1[];
+[2.,1.,1.,1.,1.,1.,1.,1.,1.,1.,1.,1.,1.,1.,1.,1.] @=> float scl1[];
 [1.] @=> float scl2[];
 
 //[1., 1.066666666666667, 1.2, 1.333333333333333, 1.5, 1.6, 1.8, 2.] @=> float scl1[];
