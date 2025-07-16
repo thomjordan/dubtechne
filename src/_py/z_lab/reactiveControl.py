@@ -15,7 +15,7 @@ class Datasource(Protocol):
 DatasourceDict: TypeAlias = dict[str, list[Datasource]] 
 
 class MidiCCListenerService(Datasource):
-    def __init__(self, device: int, cc_num: int):
+    def __init__(self, device: str, cc_num: int):
         # Subject() is an object that is both an observable sequence as well as an observer,
         #   where each notification is broadcasted to all subscribed observers.
         self.subject = Subject()
@@ -26,13 +26,16 @@ class MidiCCListenerService(Datasource):
         self.midi_in.set_callback(self.midi_callback) 
 
     def start(self):
-        if self.device >= len(self.devices):
-            print(f"[ERROR] Invalid MIDI device number {self.device}. Available devices:")
-            for i, name in enumerate(self.devices):
-                print(f"  {i}: {name}")
-            return
-        self.midi_in.open_port(self.device)
-        print(f"[INFO] Listening to MIDI port: {self.devices[self.device]}")
+        if self.devices:
+            try:
+                port_index = self.devices.index(self.device)
+                self.midi_in.open_port(port_index)
+                print(f"[INFO] Listening to MIDI port: {self.devices[port_index]}")
+            except ValueError:
+                print(f"[ERROR] MIDI input device <{self.device}> not found. Available devices: ")
+                for i, name in enumerate(self.devices): print(f"  {i}: {name}")
+        else:
+            print("No MIDI input ports found.")
         
     def midi_callback(self, message_data, _):
         message, _timestamp = message_data
@@ -60,14 +63,17 @@ class MidiNoteButtonListenerService(Datasource):
             self.midi_in.set_callback(self.midi_callback_momentary)
 
     def start(self):
-        if self.device >= len(self.devices):
-            print(f"[ERROR] Invalid MIDI device number {self.device}. Available devices:")
-            for i, name in enumerate(self.devices):
-                print(f"  {i}: {name}")
-            return
-        self.midi_in.open_port(self.device)
-        print(f"[INFO] Listening to MIDI port: {self.devices[self.device]}")
-        
+        if self.devices:
+            try:
+                port_index = self.devices.index(self.device)
+                self.midi_in.open_port(port_index)
+                print(f"[INFO] Listening to MIDI port: {self.devices[port_index]}")
+            except ValueError:
+                print(f"[ERROR] MIDI input device <{self.device}> not found. Available devices: ")
+                for i, name in enumerate(self.devices): print(f"  {i}: {name}")
+        else:
+            print("No MIDI input ports found.")
+
     def midi_callback_momentary(self, message_data, _):
         message, _timestamp = message_data
         if len(message) == 3:
@@ -247,7 +253,7 @@ class LaunchControlFrame(wx.Frame):
                 self.controls[rowname][index].SetLabel(str(value))
         return _safe_update_gui_button
 
-midi_in_device = 8
+midi_in_device = "Launch Control XL:Launch Control XL Launch Contro 28:0"
 
 def setup_listeners() -> DatasourceDict:
     listeners: DatasourceDict = dict(knobs_top=[], knobs_mid=[], knobs_low=[], faders=[], buttons_top=[], buttons_low=[])
