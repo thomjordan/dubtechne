@@ -98,7 +98,7 @@ maxRelease*pulse/100. => dur maxReleaseTime;
  
 //(beat*8) - ((now) % (beat*8)) => now; 
 
-t.timeUntilNextSync() => now;
+//t.timeUntilNextSync() => now;
 
 0 => int scale_step;
 
