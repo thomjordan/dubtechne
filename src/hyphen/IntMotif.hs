@@ -3,11 +3,11 @@ module IntMotif where
 import Numeric (showHex)
 import Data.Char (digitToInt, isHexDigit, toUpper)
 
-toHex :: (Integral a, Show a) => a -> Char
-toHex x = (map toUpper $ showHex (x `mod` 16) "") !! 0
+intToHex :: (Integral a, Show a) => a -> Char
+intToHex x = (map toUpper $ showHex (x `mod` 16) "") !! 0
 
-fromHex :: Char -> Int
-fromHex c
+hexToInt :: Char -> Int
+hexToInt c
   | isHexDigit c = digitToInt (toUpper c)
   | otherwise    = 0
 
@@ -22,18 +22,6 @@ bitsToInt = foldl (\acc bit -> acc * 2 + bit) 0
 
 extractNBits :: Int -> [Int] -> [Int]
 extractNBits n bits = map bitsToInt (groupNBits n bits)
-
-lake :: [Int]
-lake = [0,1,1,0,1,1,0,1,1,0,1,0,0,1,1,0,0,0,0,1,1,1,0,0,0,1,0,1,0,0,0,0,0,1,0,0,0,0,1,1,0,0,0,0,1,0,1,1]
-
---extractNBits 2 lake
--- ➝ [1,2,3,1,2,2,1,0,3,0,0,1,2,0,0,0,3,3,0,0,1,1,0,0]
-
---extractNBits 3 lake
--- ➝ [3,5,6,5,2,1,6,0,1,7,0,1,2,0,0,2]
-
---extractNBits 4 lake
--- ➝ [6,11,6,10,3,6,0,7,0,10,0,0]
 
 wen :: [Int]
 wen = [ 7,7,  0,0,  4,2,  2,1,  7,2,  2,7,  2,0,  0,2 
@@ -54,8 +42,8 @@ wenToInt n = (pair !! 0) * 8 + (pair !! 1) where pair = wenToTri n
 
 intToWen :: Int -> Int
 intToWen n = inverseWenList !! n
-    where inverseWenList = [2,23,8,20,16,33,44,12,15,53,37,60,62,56,31,32,7,4,29,58,38,64,47,6,18,17,48,57,30,50,28,43
-                           ,24,27,3,41,51,21,5,25,34,22,61,36,55,59,49,13,19,39,26,36,54,40,11,10,9,26,1,58,35,14,63,1]
+    where inverseWenList = [2,23,8,20,16,35,45,12,15,52,39,53,62,56,31,33,7,4,29,59,40,64,47,6,46,18,48,57,32,50,28,44
+                           ,24,27,3,42,51,21,17,25,36,22,63,37,55,30,49,13,19,41,60,61,54,38,58,10,11,26,5,9,34,14,43,1]
 
 wenListToInt :: [Int] -> [Int]
 wenListToInt ws = map wenToInt ws
@@ -96,28 +84,37 @@ triToHouseBin :: Int -> [Int]
 triToHouseBin trigram = wenListToBin $ triToHouse trigram
 
 triToHouseHex :: Int -> [Char]
-triToHouseHex trigram = map toHex $ extractNBits 4 $ triToHouseBin trigram
+triToHouseHex trigram = map intToHex $ extractNBits 4 $ triToHouseBin trigram
 
 wenListToHex :: [Int] -> [Char]
-wenListToHex ws = map toHex $ extractNBits 4 $ wenListToBin ws
+wenListToHex ws = map intToHex $ extractNBits 4 $ wenListToBin ws
+
+hexToBin :: Char -> [Int]
+hexToBin c = intToBits 4 $ hexToInt c
 
 hexStrToBinLists :: [Char] -> [[Int]]
-hexStrToBinLists hexstr = map (\x -> intToBits 4 $ fromHex x) hexstr 
+hexStrToBinLists hexstr = map hexToBin hexstr 
 
 hexStrToBin :: [Char] -> [Int]
 hexStrToBin hexstr = concat $ hexStrToBinLists hexstr
 
-binListToWen :: [Int] -> [Int]
-binListToWen binList = map intToWen $ extractNBits 6 binList
+toWen :: [Int] -> [Int]
+toWen binList = map intToWen $ extractNBits 6 binList
 
-binListToHex :: [Int] -> [Char]
-binListToHex binList = map toHex $ extractNBits 4 binList
+toGua :: [Int] -> [Int]
+toGua binList = extractNBits 6 binList
 
-binListToTri :: [Int] -> [Int]
-binListToTri binList = extractNBits 3 binList
+toHex :: [Int] -> [Char]
+toHex binList = map intToHex $ extractNBits 4 binList
 
-binListToBi :: [Int] -> [Int]
-binListToBi binList = extractNBits 2 binList
+toTri :: [Int] -> [Int]
+toTri binList = extractNBits 3 binList
+
+toBi :: [Int] -> [Int]
+toBi binList = extractNBits 2 binList
+
+toBin :: Int -> [Int] -> [Int]
+toBin n xs = concat $ map (intToBits n) xs
 
 mapSelect :: [[a]] -> [Int] -> [a]
 mapSelect materials indices =
@@ -129,21 +126,47 @@ mapSelect materials indices =
 elemRepeat :: Int -> [a] -> [a]
 elemRepeat n = concatMap (replicate n)
 
-wenToHouseBinMix :: Int -> [Int]
-wenToHouseBinMix wen = concatMap (\(x, y) -> [x, y]) (zip earthHouse $ reverse skyHouse)
-  where earthHouse = triToHouseBin $ (wenToTri wen) !! 0
-        skyHouse   = triToHouseBin $ (wenToTri wen) !! 1
+wenToHouseMix :: ([Int] -> [a]) -> Int -> [a]
+wenToHouseMix binReader wen = concatMap (\(x, y) -> [x, y]) (zip earthHouse $ reverse skyHouse)
+  where skyHouse   = binReader $ triToHouseBin $ (wenToTri wen) !! 1
+        earthHouse = binReader $ triToHouseBin $ (wenToTri wen) !! 0
 
-wenToHouseTriMix :: Int -> [Int]
-wenToHouseTriMix wen = concatMap (\(x, y) -> [x, y]) (zip earthHouse $ reverse skyHouse)
-  where earthHouse = triToHouseTri $ (wenToTri wen) !! 0
-        skyHouse   = triToHouseTri $ (wenToTri wen) !! 1
+wenToHouseMixGua :: Int -> [Int]
+wenToHouseMixGua wen = toBin 6 $ wenToHouseMix toGua wen
 
+wenToHouseMixHex :: Int -> [Int]
+wenToHouseMixHex wen =  hexStrToBin $ wenToHouseMix toHex wen
 
+wenToHouseMixTri :: Int -> [Int]
+wenToHouseMixTri wen = toBin 3 $ wenToHouseMix toTri wen
 
+wenToHouseMixBi :: Int -> [Int]
+wenToHouseMixBi wen = toBin 2 $ wenToHouseMix toBi wen
 
+wenToHouseMixBin :: Int -> [Int]
+wenToHouseMixBin wen = wenToHouseMix id wen
 
-
-
-
-
+wenToHouseMixGua2 = toBi . wenToHouseMixGua
+wenToHouseMixGua3 = toTri . wenToHouseMixGua
+wenToHouseMixGua4 = toHex . wenToHouseMixGua
+wenToHouseMixGua6 = toGua . wenToHouseMixGua
+ 
+wenToHouseMixHex2 = toBi . wenToHouseMixHex
+wenToHouseMixHex3 = toTri . wenToHouseMixHex
+wenToHouseMixHex4 = toHex . wenToHouseMixHex
+wenToHouseMixHex6 = toGua . wenToHouseMixHex
+ 
+wenToHouseMixTri2 = toBi . wenToHouseMixTri
+wenToHouseMixTri3 = toTri . wenToHouseMixTri
+wenToHouseMixTri4 = toHex . wenToHouseMixTri
+wenToHouseMixTri6 = toGua . wenToHouseMixTri
+ 
+wenToHouseMixBi2 = toBi . wenToHouseMixBi
+wenToHouseMixBi3 = toTri . wenToHouseMixBi
+wenToHouseMixBi4 = toHex . wenToHouseMixBi
+wenToHouseMixBi6 = toGua . wenToHouseMixBi
+ 
+wenToHouseMixBin2 = toBi . wenToHouseMixBin
+wenToHouseMixBin3 = toTri . wenToHouseMixBin
+wenToHouseMixBin4 = toHex . wenToHouseMixBin
+wenToHouseMixBin6 = toGua . wenToHouseMixBin
