@@ -1,13 +1,202 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TypeApplications #-}
+
 module IntMotif where
 
 import Numeric (showHex)
+import Data.Coerce (coerce, Coercible(..))
 import Data.Char (digitToInt, isHexDigit, toUpper)
 
-intToHex :: (Integral a, Show a) => a -> Char
-intToHex x = (map toUpper $ showHex (x `mod` 16) "") !! 0
+newtype Wen = Wen [Int]  deriving (Eq, Ord, Show)
+newtype Hex = Hex [Int]  deriving (Eq, Ord, Show)
+newtype Hxd = Hxd [Char] deriving (Eq, Ord, Show)
+newtype Qua = Qua [Int]  deriving (Eq, Ord, Show)
+newtype Tri = Tri [Int]  deriving (Eq, Ord, Show)
+newtype Big = Big [Int]  deriving (Eq, Ord, Show)
+newtype Bin = Bin [Int]  deriving (Eq, Ord, Show)
 
-hexToInt :: Char -> Int
-hexToInt c
+
+-- Typeclass for conversion to Wen
+class ToWen a where
+  toWen :: a -> Wen
+
+-- Typeclass for conversion to Hex
+class ToHex a where
+  toHex :: a -> Hex
+
+-- Typeclass for conversion to Hxd
+class ToHxd a where
+  toHxd :: a -> Hxd
+
+-- Typeclass for conversion to Qua
+class ToQua a where
+  toQua :: a -> Qua
+
+-- Typeclass for conversion to Tri
+class ToTri a where
+  toTri :: a -> Tri
+
+-- Typeclass for conversion to Big
+class ToBig a where
+  toBig :: a -> Big
+
+-- Typeclass for conversion to Bin
+class ToBin a where
+  toBin :: a -> Bin
+
+-- Instance for converting from Hex to Wen
+instance ToWen Hex where
+  toWen = coerce hex_to_wen
+
+-- Instance for converting from Qua to Wen
+instance ToWen Qua where
+  toWen = coerce $ bin_to_wen . qua_to_bin
+
+-- Instance for converting from Tri to Wen
+instance ToWen Tri where
+  toWen = coerce $ bin_to_wen . tri_to_bin
+
+-- Instance for converting from Big to Wen
+instance ToWen Big where
+  toWen = coerce $ bin_to_wen . big_to_bin
+
+-- Instance for converting from Bin to Wen
+instance ToWen Bin where
+  toWen = coerce bin_to_wen
+
+-- Instance for converting from Wen to Hex
+instance ToHex Wen where
+  toHex = coerce wen_to_hex
+
+-- Instance for converting from Qua to Hex
+instance ToHex Qua where
+  toHex = coerce $ bin_to_hex . qua_to_bin
+
+-- Instance for converting from Tri to Hex
+instance ToHex Tri where
+  toHex = coerce $ bin_to_hex . tri_to_bin
+
+-- Instance for converting from Big to Hex
+instance ToHex Big where
+  toHex = coerce $ bin_to_hex . big_to_bin
+
+-- Instance for converting from Bin to Hex
+instance ToHex Bin where
+  toHex = coerce bin_to_hex
+
+-- Instance for converting from Wen to Hxd
+instance ToHxd Wen where
+  toHxd = coerce $ bin_to_hxd . wen_to_bin
+
+-- Instance for converting from Hex to Hxd
+instance ToHxd Hex where
+  toHxd = coerce $ bin_to_hxd . hex_to_bin
+
+-- Instance for converting from Qua to Hxd
+instance ToHxd Qua where
+  toHxd = coerce $ bin_to_hxd . qua_to_bin
+
+-- Instance for converting from Tri to Hxd
+instance ToHxd Tri where
+  toHxd = coerce $ bin_to_hxd . tri_to_bin
+
+-- Instance for converting from Big to Hxd
+instance ToHxd Big where
+  toHxd = coerce $ bin_to_hxd . big_to_bin
+
+-- Instance for converting from Bin to Hxd
+instance ToHxd Bin where
+  toHxd = coerce bin_to_hxd
+
+-- Instance for converting from Wen to Qua
+instance ToQua Wen where
+  toQua = coerce $ bin_to_qua . wen_to_bin
+
+-- Instance for converting from Hex to Qua
+instance ToQua Hex where
+  toQua = coerce $ bin_to_qua . hex_to_bin
+
+-- Instance for converting from Tri to Qua
+instance ToQua Tri where
+  toQua = coerce $ bin_to_qua . tri_to_bin
+
+-- Instance for converting from Big to Qua
+instance ToQua Big where
+  toQua = coerce $ bin_to_qua . big_to_bin
+
+-- Instance for converting from Bin to Qua
+instance ToQua Bin where
+  toQua = coerce bin_to_qua
+
+-- Instance for converting from Wen to Tri
+instance ToTri Wen where
+  toTri = coerce $ bin_to_tri . wen_to_bin
+
+-- Instance for converting from Hex to Tri
+instance ToTri Hex where
+  toTri = coerce $ bin_to_tri . hex_to_bin
+
+-- Instance for converting from Qua to Tri
+instance ToTri Qua where
+  toTri = coerce $ bin_to_tri . qua_to_bin
+
+-- Instance for converting from Big to Tri
+instance ToTri Big where
+  toTri = coerce $ bin_to_tri . big_to_bin
+
+-- Instance for converting from Bin to Tri
+instance ToTri Bin where
+  toTri = coerce bin_to_tri
+
+-- Instance for converting from Wen to Big
+instance ToBig Wen where
+  toBig = coerce $ bin_to_big . wen_to_bin
+
+-- Instance for converting from Hex to Big
+instance ToBig Hex where
+  toBig = coerce $ bin_to_big . hex_to_bin
+
+-- Instance for converting from Qua to Big
+instance ToBig Qua where
+  toBig = coerce $ bin_to_big . qua_to_bin
+
+-- Instance for converting from Tri to Big
+instance ToBig Tri where
+  toBig = coerce $ bin_to_big . tri_to_bin
+
+-- Instance for converting from Bin to Big
+instance ToBig Bin where
+  toBig = coerce bin_to_big
+
+-- Instance for converting from Wen to Bin
+instance ToBin Wen where
+  toBin = coerce wen_to_bin
+
+-- Instance for converting from Hex to Bin
+instance ToBin Hex where
+  toBin = coerce hex_to_bin
+
+-- Instance for converting from Hxd to Bin
+instance ToBin Hxd where
+  toBin = coerce hxd_to_bin
+
+-- Instance for converting from Qua to Bin
+instance ToBin Qua where
+  toBin = coerce qua_to_bin
+
+-- Instance for converting from Tri to Bin
+instance ToBin Tri where
+  toBin = coerce tri_to_bin
+
+-- Instance for converting from Big to Bin
+instance ToBin Big where
+  toBin = coerce big_to_bin
+
+intToHxd :: (Integral a, Show a) => a -> Char
+intToHxd x = (map toUpper $ showHex (x `mod` 16) "") !! 0
+
+hxdToInt :: Char -> Int
+hxdToInt c
   | isHexDigit c = digitToInt (toUpper c)
   | otherwise    = 0
 
@@ -23,48 +212,44 @@ bitsToInt = foldl (\acc bit -> acc * 2 + bit) 0
 extractNBits :: Int -> [Int] -> [Int]
 extractNBits n bits = map bitsToInt (groupNBits n bits)
 
-wen :: [Int]
-wen = [ 7,7,  0,0,  4,2,  2,1,  7,2,  2,7,  2,0,  0,2 
-      , 7,3,  6,7,  7,0,  0,7,  5,7,  7,5,  1,0,  0,4 
-      , 4,6,  3,1,  6,0,  0,3,  4,5,  5,1,  0,1,  4,0
-      , 4,7,  7,1,  4,1,  3,6,  2,2,  5,5,  1,6,  3,4
-      , 1,7,  7,4,  0,5,  5,0,  5,3,  6,5,  1,2,  2,4
-      , 6,1,  4,3,  7,6,  3,7,  0,6,  3,0,  2,6,  3,2
-      , 5,6,  3,5,  4,4,  1,1,  1,3,  6,4,  5,4,  1,5
-      , 3,3,  6,6,  2,3,  6,2,  6,3,  1,4,  5,2,  2,5 ]
+kingWen :: [Int]
+kingWen = [ 7,7,  0,0,  4,2,  2,1,  7,2,  2,7,  2,0,  0,2 
+          , 7,3,  6,7,  7,0,  0,7,  5,7,  7,5,  1,0,  0,4 
+          , 4,6,  3,1,  6,0,  0,3,  4,5,  5,1,  0,1,  4,0
+          , 4,7,  7,1,  4,1,  3,6,  2,2,  5,5,  1,6,  3,4
+          , 1,7,  7,4,  0,5,  5,0,  5,3,  6,5,  1,2,  2,4
+          , 6,1,  4,3,  7,6,  3,7,  0,6,  3,0,  2,6,  3,2
+          , 5,6,  3,5,  4,4,  1,1,  1,3,  6,4,  5,4,  1,5
+          , 3,3,  6,6,  2,3,  6,2,  6,3,  1,4,  5,2,  2,5 ]
 
 wenToTri :: Int -> [Int]
-wenToTri n = [wen !! index, wen !! (index+1)] 
+wenToTri n = [kingWen !! index, kingWen !! (index+1)] 
     where index = ((n-1) `mod` 64) * 2  
 
-wenToInt :: Int -> Int
-wenToInt n = (pair !! 0) * 8 + (pair !! 1) where pair = wenToTri n
+wen_to_hex :: [Int] -> [Int]
+wen_to_hex ws = map wenToHex ws
+    where wenToHex n = (pair !! 0) * 8 + (pair !! 1) where pair = wenToTri n
 
-intToWen :: Int -> Int
-intToWen n = inverseWenList !! n
+hex_to_wen :: [Int] -> [Int]
+hex_to_wen ns = map (\n -> inverseWenList !! n) ns
     where inverseWenList = [2,23,8,20,16,35,45,12,15,52,39,53,62,56,31,33,7,4,29,59,40,64,47,6,46,18,48,57,32,50,28,44
                            ,24,27,3,42,51,21,17,25,36,22,63,37,55,30,49,13,19,41,60,61,54,38,58,10,11,26,5,9,34,14,43,1]
 
-wenListToInt :: [Int] -> [Int]
-wenListToInt ws = map wenToInt ws
-
-intListToWen :: [Int] -> [Int]
-intListToWen ns = map intToWen ns
+hex_to_bin :: [Int] -> [Int]
+hex_to_bin = concatMap (intToBits 6)
 
 intToBits :: Int -> Int -> [Int]
-intToBits n val = reverse (take n (reverse (toBits val) ++ repeat 0))
+intToBits n val = reverse (take n (reverse (toBits modval) ++ repeat 0))
   where
+    modval = val `mod` (2^n)
     toBits 0 = []
     toBits x = toBits (x `div` 2) ++ [x `mod` 2]
 
-wenListToBin :: [Int] -> [Int]
-wenListToBin ws = concat $ map (intToBits 3) $ concat $ map wenToTri ws
+wen_to_tri :: [Int] -> [Int]
+wen_to_tri ws = concat $ map wenToTri ws
 
-wenListToTri :: [Int] -> [Int]
-wenListToTri ws = concat $ map wenToTri ws
-
-triListToBin :: [Int] -> [Int]
-triListToBin trigrams = concat $ map (intToBits 3) trigrams
+wen_to_bin :: [Int] -> [Int]
+wen_to_bin ws = concatMap (intToBits 6) (wen_to_hex ws)
 
 triToHouse :: Int -> [Int]
 triToHouse trigram = houseList !! (trigram `mod` 8)
@@ -78,43 +263,52 @@ triToHouse trigram = houseList !! (trigram `mod` 8)
                       ,[ 1,44,33,12,20,23,35,14]]
 
 triToHouseTri :: Int -> [Int]
-triToHouseTri trigram = wenListToTri $ triToHouse trigram
+triToHouseTri trigram = wen_to_tri $ triToHouse trigram
 
 triToHouseBin :: Int -> [Int]
-triToHouseBin trigram = wenListToBin $ triToHouse trigram
+triToHouseBin trigram = wen_to_bin $ triToHouse trigram
 
-triToHouseHex :: Int -> [Char]
-triToHouseHex trigram = map intToHex $ extractNBits 4 $ triToHouseBin trigram
+triToHouseHxd :: Int -> [Char]
+triToHouseHxd trigram = map intToHxd $ extractNBits 4 $ triToHouseBin trigram
 
-wenListToHex :: [Int] -> [Char]
-wenListToHex ws = map intToHex $ extractNBits 4 $ wenListToBin ws
+wen_to_hxd :: [Int] -> [Char]
+wen_to_hxd ws = map intToHxd $ extractNBits 4 $ wen_to_bin ws
 
-hexToBin :: Char -> [Int]
-hexToBin c = intToBits 4 $ hexToInt c
+hxd_to_binlists :: [Char] -> [[Int]]
+hxd_to_binlists hxstr = map (\c -> intToBits 4 $ hxdToInt c) hxstr 
 
-hexStrToBinLists :: [Char] -> [[Int]]
-hexStrToBinLists hexstr = map hexToBin hexstr 
+hxd_to_bin :: [Char] -> [Int]
+hxd_to_bin hxstr = concat $ hxd_to_binlists hxstr
 
-hexStrToBin :: [Char] -> [Int]
-hexStrToBin hexstr = concat $ hexStrToBinLists hexstr
+qua_to_bin :: [Int] -> [Int]
+qua_to_bin = concatMap (intToBits 4)
 
-toWen :: [Int] -> [Int]
-toWen binList = map intToWen $ extractNBits 6 binList
+tri_to_bin :: [Int] -> [Int]
+tri_to_bin = concatMap (intToBits 3)
 
-toGua :: [Int] -> [Int]
-toGua binList = extractNBits 6 binList
+big_to_bin :: [Int] -> [Int]
+big_to_bin = concatMap (intToBits 2)
 
-toHex :: [Int] -> [Char]
-toHex binList = map intToHex $ extractNBits 4 binList
+bin_to_wen :: [Int] -> [Int]
+bin_to_wen binList = hex_to_wen $ extractNBits 6 binList
 
-toTri :: [Int] -> [Int]
-toTri binList = extractNBits 3 binList
+bin_to_hex :: [Int] -> [Int]
+bin_to_hex binList = extractNBits 6 binList
 
-toBi :: [Int] -> [Int]
-toBi binList = extractNBits 2 binList
+bin_to_hxd :: [Int] -> [Char]
+bin_to_hxd binList = map intToHxd $ extractNBits 4 binList
 
-toBin :: Int -> [Int] -> [Int]
-toBin n xs = concat $ map (intToBits n) xs
+bin_to_qua :: [Int] -> [Int]
+bin_to_qua binList = extractNBits 4 binList
+
+bin_to_tri :: [Int] -> [Int]
+bin_to_tri binList = extractNBits 3 binList
+
+bin_to_big :: [Int] -> [Int]
+bin_to_big binList = extractNBits 2 binList
+
+intListToBin :: Int -> [Int] -> [Int]
+intListToBin n xs = concat $ map (intToBits n) xs
 
 mapSelect :: [[a]] -> [Int] -> [a]
 mapSelect materials indices =
@@ -126,47 +320,45 @@ mapSelect materials indices =
 elemRepeat :: Int -> [a] -> [a]
 elemRepeat n = concatMap (replicate n)
 
-wenToHouseMix :: ([Int] -> [a]) -> Int -> [a]
-wenToHouseMix binReader wen = concatMap (\(x, y) -> [x, y]) (zip earthHouse $ reverse skyHouse)
-  where skyHouse   = binReader $ triToHouseBin $ (wenToTri wen) !! 1
-        earthHouse = binReader $ triToHouseBin $ (wenToTri wen) !! 0
+class WenToHouseMix a where
+  wenToHouseMix' :: ([Int] -> a) -> Int -> Bin
 
-wenToHouseMixGua :: Int -> [Int]
-wenToHouseMixGua wen = toBin 6 $ wenToHouseMix toGua wen
+instance WenToHouseMix Wen where
+  wenToHouseMix' br w = Bin $ wen_to_bin $ wen_to_house_mix (coerce . br) w
 
-wenToHouseMixHex :: Int -> [Int]
-wenToHouseMixHex wen =  hexStrToBin $ wenToHouseMix toHex wen
+instance WenToHouseMix Hex where
+  wenToHouseMix' br w = Bin $ intListToBin 6 $ wen_to_house_mix (coerce . br) w
 
-wenToHouseMixTri :: Int -> [Int]
-wenToHouseMixTri wen = toBin 3 $ wenToHouseMix toTri wen
+instance WenToHouseMix Qua where
+  wenToHouseMix' br w = Bin $ intListToBin 4 $ wen_to_house_mix (coerce . br) w
 
-wenToHouseMixBi :: Int -> [Int]
-wenToHouseMixBi wen = toBin 2 $ wenToHouseMix toBi wen
+instance WenToHouseMix Tri where
+  wenToHouseMix' br w = Bin $ intListToBin 3 $ wen_to_house_mix (coerce . br) w
 
-wenToHouseMixBin :: Int -> [Int]
-wenToHouseMixBin wen = wenToHouseMix id wen
+instance WenToHouseMix Big where
+  wenToHouseMix' br w = Bin $ intListToBin 2 $ wen_to_house_mix (coerce . br) w
 
-wenToHouseMixGua2 = toBi . wenToHouseMixGua
-wenToHouseMixGua3 = toTri . wenToHouseMixGua
-wenToHouseMixGua4 = toHex . wenToHouseMixGua
-wenToHouseMixGua6 = toGua . wenToHouseMixGua
- 
-wenToHouseMixHex2 = toBi . wenToHouseMixHex
-wenToHouseMixHex3 = toTri . wenToHouseMixHex
-wenToHouseMixHex4 = toHex . wenToHouseMixHex
-wenToHouseMixHex6 = toGua . wenToHouseMixHex
- 
-wenToHouseMixTri2 = toBi . wenToHouseMixTri
-wenToHouseMixTri3 = toTri . wenToHouseMixTri
-wenToHouseMixTri4 = toHex . wenToHouseMixTri
-wenToHouseMixTri6 = toGua . wenToHouseMixTri
- 
-wenToHouseMixBi2 = toBi . wenToHouseMixBi
-wenToHouseMixBi3 = toTri . wenToHouseMixBi
-wenToHouseMixBi4 = toHex . wenToHouseMixBi
-wenToHouseMixBi6 = toGua . wenToHouseMixBi
- 
-wenToHouseMixBin2 = toBi . wenToHouseMixBin
-wenToHouseMixBin3 = toTri . wenToHouseMixBin
-wenToHouseMixBin4 = toHex . wenToHouseMixBin
-wenToHouseMixBin6 = toGua . wenToHouseMixBin
+instance WenToHouseMix Bin where
+  wenToHouseMix' br w = Bin $ wen_to_house_mix (coerce . br) w
+
+-- Helper function to automatically wrap in Bin
+wenToHouseMix :: WenToHouseMix a => (Bin -> a) -> Int -> Bin
+wenToHouseMix br w = wenToHouseMix' (br . Bin) w
+
+wen_to_house_mix :: ([Int] -> [a]) -> Int -> [a]
+wen_to_house_mix binReader wen = concatMap (\(x, y) -> [x, y]) (zip earthHouse $ reverse skyHouse)
+  where skyHouse   = binReader $ triToHouseBin  $ (wenToTri wen) !! 1
+        earthHouse = binReader $ triToHouseBin  $ (wenToTri wen) !! 0
+
+oddIndexedElements :: [a] -> [a]
+oddIndexedElements xs = [val | (idx, val) <- zip [0..] xs, odd idx]
+
+evenIndexedElements :: [a] -> [a]
+evenIndexedElements xs = [val | (idx, val) <- zip [0..] xs, even idx]
+
+odds :: (WenToHouseMix a, Coercible a [Int]) => (Bin -> a) -> Int -> [Int]
+odds br w = oddIndexedElements (coerce (br $ wenToHouseMix br w))
+
+evens :: (WenToHouseMix a, Coercible a [Int]) => (Bin -> a) -> Int -> [Int]
+evens br w = evenIndexedElements (coerce (br $ wenToHouseMix br w))
+
