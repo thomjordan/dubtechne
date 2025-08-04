@@ -6,6 +6,8 @@ module IntMotif where
 import Numeric (showHex)
 import Data.Coerce (coerce, Coercible(..))
 import Data.Char (digitToInt, isHexDigit, toUpper)
+import Data.List (sort, transpose)
+import Data.List.Split (chunksOf)
 
 newtype Wen = Wen [Int]  deriving (Eq, Ord, Show)
 newtype Hex = Hex [Int]  deriving (Eq, Ord, Show)
@@ -14,7 +16,6 @@ newtype Qua = Qua [Int]  deriving (Eq, Ord, Show)
 newtype Tri = Tri [Int]  deriving (Eq, Ord, Show)
 newtype Big = Big [Int]  deriving (Eq, Ord, Show)
 newtype Bin = Bin [Int]  deriving (Eq, Ord, Show)
-
 
 -- Typeclass for conversion to Wen
 class ToWen a where
@@ -192,6 +193,10 @@ instance ToBin Tri where
 instance ToBin Big where
   toBin = coerce big_to_bin
 
+-- Instance for converting from Bin to Bin
+instance ToBin Bin where
+  toBin = id
+
 intToHxd :: (Integral a, Show a) => a -> Char
 intToHxd x = (map toUpper $ showHex (x `mod` 16) "") !! 0
 
@@ -274,8 +279,11 @@ triToHouseHxd trigram = map intToHxd $ extractNBits 4 $ triToHouseBin trigram
 wen_to_hxd :: [Int] -> [Char]
 wen_to_hxd ws = map intToHxd $ extractNBits 4 $ wen_to_bin ws
 
+hxdToBin :: Char -> [Int]
+hxdToBin hxd = intToBits 4 $ hxdToInt hxd
+
 hxd_to_binlists :: [Char] -> [[Int]]
-hxd_to_binlists hxstr = map (\c -> intToBits 4 $ hxdToInt c) hxstr 
+hxd_to_binlists hxstr = map hxdToBin hxstr 
 
 hxd_to_bin :: [Char] -> [Int]
 hxd_to_bin hxstr = concat $ hxd_to_binlists hxstr
@@ -362,3 +370,41 @@ odds br w = oddIndexedElements (coerce (br $ wenToHouseMix br w))
 evens :: (WenToHouseMix a, Coercible a [Int]) => (Bin -> a) -> Int -> [Int]
 evens br w = evenIndexedElements (coerce (br $ wenToHouseMix br w))
 
+wenscape :: Wen
+-- (evenIndexedElements [1..64]) ++ (reverse $ oddIndexedElements [1..64])
+wenscape = Wen [1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39,41,43,45,47,49,51,53,55,57,59,61,63
+               ,64,62,60,58,56,54,52,50,48,46,44,42,40,38,36,34,32,30,28,26,24,22,20,18,16,14,12,10,8,6,4,2]
+
+-- Typeclass for converting back from [Int]
+class FromIntList a where
+  fromIntList :: [Int] -> a
+
+-- Instances for all your newtypes
+instance FromIntList Wen where
+  fromIntList = Wen
+
+instance FromIntList Hex where
+  fromIntList = Hex
+
+instance FromIntList Qua where
+  fromIntList = Qua
+
+instance FromIntList Tri where
+  fromIntList = Tri
+
+instance FromIntList Big where
+  fromIntList = Big
+
+instance FromIntList Bin where
+  fromIntList = Bin
+
+reorder :: (Coercible a [Int], FromIntList a) => a -> Int -> a
+reorder xs n = fromIntList $ concat $ transpose $ chunksOf n (coerce xs)
+
+logicOp :: (Coercible a [Int], ToBin a, FromIntList a) => a -> a -> Char -> a
+logicOp xs ys op = fromIntList $ nths indexes $ hxdToBin op
+  where indexes = take maxlen $ zipWith (\x y -> x*2+y) (cycle binA) (cycle binB)
+        nths = (\idxs lst -> map (\i -> lst !! i) idxs)
+        maxlen = max (length binA) (length binB)
+        binA = coerce $ toBin xs
+        binB = coerce $ toBin ys
