@@ -6,16 +6,16 @@ module IntMotif where
 import Numeric (showHex)
 import Data.Coerce (coerce, Coercible(..))
 import Data.Char (digitToInt, isHexDigit, toUpper)
-import Data.List (sort, transpose)
+import Data.List (sort, transpose, genericLength)
 import Data.List.Split (chunksOf)
 
-newtype Wen = Wen [Int]  deriving (Eq, Ord, Show)
-newtype Hex = Hex [Int]  deriving (Eq, Ord, Show)
-newtype Hxd = Hxd [Char] deriving (Eq, Ord, Show)
-newtype Qua = Qua [Int]  deriving (Eq, Ord, Show)
-newtype Tri = Tri [Int]  deriving (Eq, Ord, Show)
-newtype Big = Big [Int]  deriving (Eq, Ord, Show)
-newtype Bin = Bin [Int]  deriving (Eq, Ord, Show)
+newtype Wen = Wen [Int]  deriving (Eq, Ord, Show, Monoid, Semigroup)
+newtype Hex = Hex [Int]  deriving (Eq, Ord, Show, Monoid, Semigroup)
+newtype Hxd = Hxd [Char] deriving (Eq, Ord, Show, Monoid, Semigroup)
+newtype Qua = Qua [Int]  deriving (Eq, Ord, Show, Monoid, Semigroup)
+newtype Tri = Tri [Int]  deriving (Eq, Ord, Show, Monoid, Semigroup)
+newtype Big = Big [Int]  deriving (Eq, Ord, Show, Monoid, Semigroup)
+newtype Bin = Bin [Int]  deriving (Eq, Ord, Show, Monoid, Semigroup)
 
 -- Typeclass for conversion to Wen
 class ToWen a where
@@ -45,6 +45,10 @@ class ToBig a where
 class ToBin a where
   toBin :: a -> Bin
 
+-- Instance for converting from Wen to Wen
+instance ToWen Wen where
+  toWen = coerce constrainWen
+
 -- Instance for converting from Hex to Wen
 instance ToWen Hex where
   toWen = coerce hex_to_wen
@@ -68,6 +72,10 @@ instance ToWen Bin where
 -- Instance for converting from Wen to Hex
 instance ToHex Wen where
   toHex = coerce wen_to_hex
+
+-- Instance for converting from Hex to Hex
+instance ToHex Hex where
+  toHex = coerce constrainHex
 
 -- Instance for converting from Qua to Hex
 instance ToHex Qua where
@@ -93,6 +101,10 @@ instance ToHxd Wen where
 instance ToHxd Hex where
   toHxd = coerce $ bin_to_hxd . hex_to_bin
 
+-- Instance for converting from Hxd to Hxd
+instance ToHxd Hxd where
+  toHxd = id
+
 -- Instance for converting from Qua to Hxd
 instance ToHxd Qua where
   toHxd = coerce $ bin_to_hxd . qua_to_bin
@@ -116,6 +128,10 @@ instance ToQua Wen where
 -- Instance for converting from Hex to Qua
 instance ToQua Hex where
   toQua = coerce $ bin_to_qua . hex_to_bin
+
+-- Instance for converting from Qua to Qua
+instance ToQua Qua where
+  toQua = coerce constrainQua
 
 -- Instance for converting from Tri to Qua
 instance ToQua Tri where
@@ -141,6 +157,10 @@ instance ToTri Hex where
 instance ToTri Qua where
   toTri = coerce $ bin_to_tri . qua_to_bin
 
+-- Instance for converting from Tri to Tri
+instance ToTri Tri where
+  toTri = coerce constrainTri
+
 -- Instance for converting from Big to Tri
 instance ToTri Big where
   toTri = coerce $ bin_to_tri . big_to_bin
@@ -164,6 +184,10 @@ instance ToBig Qua where
 -- Instance for converting from Tri to Big
 instance ToBig Tri where
   toBig = coerce $ bin_to_big . tri_to_bin
+
+-- Instance for converting from Big to Big
+instance ToBig Big where
+  toBig = coerce constrainBig
 
 -- Instance for converting from Bin to Big
 instance ToBig Bin where
@@ -195,7 +219,7 @@ instance ToBin Big where
 
 -- Instance for converting from Bin to Bin
 instance ToBin Bin where
-  toBin = id
+  toBin = coerce constrainBin
 
 intToHxd :: (Integral a, Show a) => a -> Char
 intToHxd x = (map toUpper $ showHex (x `mod` 16) "") !! 0
@@ -318,6 +342,24 @@ bin_to_big binList = extractNBits 2 binList
 intListToBin :: Int -> [Int] -> [Int]
 intListToBin n xs = concat $ map (intToBits n) xs
 
+constrainWen :: [Int] -> [Int]
+constrainWen xs = map (\x -> x `mod` 64) xs
+
+constrainHex :: [Int] -> [Int]
+constrainHex xs = map (\x -> x `mod` 64) xs
+
+constrainQua :: [Int] -> [Int]
+constrainQua xs = map (\x -> x `mod` 16) xs
+
+constrainTri :: [Int] -> [Int]
+constrainTri xs = map (\x -> x `mod` 8) xs
+
+constrainBig :: [Int] -> [Int]
+constrainBig xs = map (\x -> x `mod` 4) xs
+
+constrainBin :: [Int] -> [Int]
+constrainBin xs = map (\x -> x `mod` 2) xs
+
 mapSelect :: [[a]] -> [Int] -> [a]
 mapSelect materials indices =
   concatMap select indices
@@ -355,8 +397,8 @@ wenToHouseMix br w = wenToHouseMix' (br . Bin) w
 
 wen_to_house_mix :: ([Int] -> [a]) -> Int -> [a]
 wen_to_house_mix binReader wen = concatMap (\(x, y) -> [x, y]) (zip earthHouse $ reverse skyHouse)
-  where skyHouse   = binReader $ triToHouseBin  $ (wenToTri wen) !! 1
-        earthHouse = binReader $ triToHouseBin  $ (wenToTri wen) !! 0
+  where skyHouse   = binReader $ triToHouseBin $ (wenToTri wen) !! 1
+        earthHouse = binReader $ triToHouseBin $ (wenToTri wen) !! 0
 
 oddIndexedElements :: [a] -> [a]
 oddIndexedElements xs = [val | (idx, val) <- zip [0..] xs, odd idx]
@@ -381,30 +423,108 @@ class FromIntList a where
 
 -- Instances for all your newtypes
 instance FromIntList Wen where
-  fromIntList = Wen
+  fromIntList = toWen . Wen
 
 instance FromIntList Hex where
-  fromIntList = Hex
+  fromIntList = toHex . Hex
 
 instance FromIntList Qua where
-  fromIntList = Qua
+  fromIntList = toQua . Qua
 
 instance FromIntList Tri where
-  fromIntList = Tri
+  fromIntList = toTri . Tri
 
 instance FromIntList Big where
-  fromIntList = Big
+  fromIntList = toBig . Big
 
 instance FromIntList Bin where
-  fromIntList = Bin
+  fromIntList = toBin . Bin
+
+-- Typeclass for converting back from Bin
+class ConvertFromBinList a where
+  convertFromBinList :: Bin -> a
+
+-- Instances for all your newtypes
+instance ConvertFromBinList Wen where
+  convertFromBinList = toWen
+
+instance ConvertFromBinList Hex where
+  convertFromBinList = toHex
+
+instance ConvertFromBinList Qua where
+  convertFromBinList = toQua
+
+instance ConvertFromBinList Tri where
+  convertFromBinList = toTri
+
+instance ConvertFromBinList Big where
+  convertFromBinList = toBig
+
+instance ConvertFromBinList Bin where
+  convertFromBinList = id
+
+-- Skip by a fixed amount, starting from the skipAmt-th element
+-- used with a skipAmt of (length xs)-1 returns the list reversed
+skipBy :: [a] -> Int -> [a]
+skipBy xs skipAmt =
+  take n [ xs !! ((start + i * skipAmt) `mod` n) | i <- [0..] ]
+  where
+    n     = genericLength xs
+    start = skipAmt `mod` n
+
+-- Skip by a fixed amount, starting from the first element
+-- used with a skipAmt of 1 returns the same list
+skipBy_ :: [a] -> Int -> [a]
+skipBy_ xs skipAmt =
+  take n [ xs !! ((i * skipAmt) `mod` n) | i <- [0..] ]
+  where n = genericLength xs
+
+-- Typeclass for list-like operations on newtypes
+class (Coercible a [Int], FromIntList a) => ListLike a where
+  length' :: a -> Int
+  head' :: a -> Int
+  tail' :: a -> a
+  take' :: Int -> a -> a
+  drop' :: Int -> a -> a
+  reverse' :: a -> a
+  sort' :: a -> a
+  map' :: (Int -> Int) -> a -> a
+  filter' :: (Int -> Bool) -> a -> a
+  skipBy' :: a -> Int -> a
+  skipBy_' :: a -> Int -> a
+
+  -- Default implementations
+  length' xs = length (coerce xs :: [Int])
+  head' xs = head (coerce xs :: [Int])
+  tail' = fromIntList . tail . coerce
+  take' n = fromIntList . take n . coerce
+  drop' n = fromIntList . drop n . coerce
+  reverse' = fromIntList . reverse . coerce
+  sort' = fromIntList . sort . coerce
+  map' f = fromIntList . map f . coerce
+  filter' p = fromIntList . filter p . coerce
+  skipBy' xs skipAmt = fromIntList $ skipBy (coerce xs) skipAmt
+  skipBy_' xs skipAmt = fromIntList $ skipBy_ (coerce xs) skipAmt
+
+-- Instances for all your newtypes
+instance ListLike Wen
+instance ListLike Hex
+instance ListLike Qua
+instance ListLike Tri
+instance ListLike Big
+instance ListLike Bin
 
 reorder :: (Coercible a [Int], FromIntList a) => a -> Int -> a
 reorder xs n = fromIntList $ concat $ transpose $ chunksOf n (coerce xs)
 
-logicOp :: (Coercible a [Int], ToBin a, FromIntList a) => a -> a -> Char -> a
-logicOp xs ys op = fromIntList $ nths indexes $ hxdToBin op
+logicOp :: (Coercible a [Int], ToBin a, ConvertFromBinList a) => a -> a -> Char -> a
+logicOp xs ys op = convertFromBinList $ Bin $ nths indexes $ hxdToBin op
   where indexes = take maxlen $ zipWith (\x y -> x*2+y) (cycle binA) (cycle binB)
         nths = (\idxs lst -> map (\i -> lst !! i) idxs)
         maxlen = max (length binA) (length binB)
         binA = coerce $ toBin xs
         binB = coerce $ toBin ys
+
+
+
+
