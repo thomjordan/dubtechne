@@ -525,6 +525,3 @@ logicOp xs ys op = convertFromBinList $ Bin $ nths indexes $ hxdToBin op
         binA = coerce $ toBin xs
         binB = coerce $ toBin ys
 
-
-
-
